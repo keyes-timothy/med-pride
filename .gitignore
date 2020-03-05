@@ -2,11 +2,8 @@
 .Rhistory
 .Rapp.history
 
-# Session Data files
+# Session data files
 .RData
-
-# User-specific files
-.Ruserdata
 
 # Example code in package build process
 *-Ex.R
@@ -18,9 +15,10 @@
 /*.Rcheck/
 
 # RStudio files
+*.Rproj
 .Rproj.user/
 
-# produced vignettes
+# Produced vignettes
 vignettes/*.html
 vignettes/*.pdf
 
@@ -28,12 +26,34 @@ vignettes/*.pdf
 .httr-oauth
 
 # knitr and R markdown default cache directories
-*_cache/
+/*_cache/
 /cache/
 
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
 
-# R Environment Variables
-.Renviron
+# Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
+rsconnect/
+
+# macOS file
+.DS_Store
+
+# Data folders
+data/
+data-raw/
+
+# Data files
+*.csv
+*.dta
+*.gz
+*.por
+*.rda
+*.rds
+*.sas
+*.sav
+*.stata
+*.tsv
+*.txt
+*.xpt
+.Rproj.user

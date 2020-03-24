@@ -1,4 +1,6 @@
-# Description
+### Description
+### This script reads and recodes data from the 2018-2020 MSPA National 
+### Needs-assessment of LGBTQ+ medical students in the United States. 
 
 # Author: Timothy Keyes
 # Version: 2020-03-23

@@ -1,0 +1,318 @@
+---
+title: "Needs Assessment General Report" 
+author: "Timothy Keyes" 
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(lubridate)
+
+# Parameters
+input_path <- here::here("data", "mspa_na_data.rds")
+metadata_path <- here::here("data-raw", "school_metadata.csv")
+
+my_theme <- 
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+    axis.title.y = element_text(size = 12, face = "bold"), 
+    axis.title.x = element_text(size = 12, face = "bold")
+  ) 
+
+#===============================================================================
+
+# read in data
+na_data <- 
+  input_path %>% 
+  read_rds()
+
+metadata <- 
+  metadata_path %>% 
+  read_csv()
+```
+
+## General data summary
+
+First, we want to see if we were able to obtain consent from everyone who took the survey: 
+
+```{r}
+na_data %>% 
+  count(consent)
+```
+
+Thus, we can see that there are 32 people who didn't actually check the "consent" box. They will need to be removed from the analysis. 
+
+We can also look, for our own purposes, of the number of responses over time window that the survey was open. 
+
+```{r}
+na_data %>% 
+  count(date = lubridate::as_date(timestamp), name = "responses") %>% 
+  ggplot(aes(x = date, y = responses)) + 
+  geom_line() + 
+  scale_x_date(
+    breaks = scales::breaks_width(width = "2 months"), 
+    labels = scales::label_date(format = "%b %Y")
+  ) + 
+  labs(
+    title = "Number of responses to the N-A survey by date", 
+    x = NULL, 
+    y = "Responses (# of students per day)"
+  )
+
+```
+
+From this, we can see that recruitment tends to happen in a punctuated fashion rather than by trickle-in over time. Each of the peaks corresponds to pushes coordinated by our team to send the survey to additional schools.
+
+For a cumulative plot...
+
+```{r, warning = FALSE}
+num_students <- function(date) { 
+  na_data %>% 
+    mutate(my_date = as_date(timestamp)) %>% 
+    filter(my_date <= date) %>% 
+    count() %>% 
+    pull(n)
+}
+
+na_data %>% 
+  transmute(
+    my_date = as_date(timestamp), 
+    unique_students = 
+      map_int(my_date, num_students)
+  ) %>% 
+  ggplot(aes(x = my_date, y = unique_students)) + 
+  geom_line() + 
+  scale_x_date(
+    breaks = scales::breaks_width(width = "2 months"), 
+    labels = scales::label_date(format = "%b %Y")
+  ) + 
+  labs(
+    title = "Respondent recruitment over time", 
+    x = NULL, 
+    y = "Number of unique students"
+  )
+
+```
+
+
+We can also look at our recruitment of unique schools over time: 
+
+```{r, warning=FALSE}
+num_schools <- function(date) { 
+  na_data %>% 
+    mutate(my_date = as_date(timestamp)) %>% 
+    filter(my_date <= date) %>% 
+    pull(school_attend) %>% 
+    n_distinct()
+}
+
+
+na_data %>% 
+  transmute(
+    my_date = as_date(timestamp), 
+    unique_schools = 
+      map_int(my_date, num_schools)
+  ) %>% 
+  ggplot(aes(x = my_date, y = unique_schools)) + 
+  geom_line() + 
+  scale_x_date(
+    breaks = scales::breaks_width(width = "2 months"), 
+    labels = scales::label_date(format = "%b %Y")
+  ) + 
+  labs(
+    title = "School recruitment over time", 
+    x = NULL, 
+    y = "Number of unique schools recruited"
+  )
+
+```
+
+Together, these plots indicate that, in general, having a survey link passively open over time does not really lead to the steady "trickling in" of responses over time. Rather, it seems that coordinated pushes of survey instruments to specific schools (with wide desemination) yield the most responses, Thus, one strategic recommendation for MSPA might be to build its survey instrument distribution infrastructure (either through a portal, an app that MSPA members can have on their phones, or some other architecture that leverages our campus network). 
+
+## Wrangling
+
+First, we want to remove people who did not consent to the survey. 
+
+```{r}
+na_data <- 
+  na_data %>% 
+  filter(consent == "yes")
+```
+
+And then we can filter out some variables that we don't need.
+
+```{r}
+na_data <- 
+  na_data %>% 
+  select(-survey_id, -consent, -complete)
+```
+
+And create a few variables that we'll need later: 
+
+```{r}
+na_data <- 
+  na_data %>% 
+  mutate(
+    sex = 
+      case_when(
+        sab_is_male == "yes"   ~ "male", 
+        sab_is_female == "yes" ~ "female", 
+        TRUE                   ~ NA_character_
+      )
+  )
+```
+
+
+
+## General Demographics report
+
+The first section of the survey asked questions about respondents' demographic identifiers, including the following: 
+
+* What school they attend 
+* What year of medical school they're in
+* Whether or not they identify as LGBTQ+
+* What sex they were assigned at birth 
+* What their current gender identity is
+* What they current sexual orientation is
+* Their race/ethnicity
+
+Below, we report the breakdown of our survey respondents by each of these demographics.
+
+### What school do you attend?
+
+Schools are arranged in order of decreasing number of responses. 
+
+```{r}
+na_data %>%
+  count(school_attend, name = "Number of responses") %>% 
+  mutate(
+    `Percentage of total responses` = 
+      ((`Number of responses` / sum(`Number of responses`)) * 100) %>% 
+      round(digits = 1)
+  ) %>% 
+  rename(School = school_attend) %>% 
+  arrange(desc(`Number of responses`)) %>% 
+  knitr::kable()
+```
+
+### What year of medical school are you in? 
+
+```{r, fig.width = 6}
+n <- 
+  na_data %>% 
+  filter(!is.na(med_school_year)) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  drop_na(med_school_year) %>% 
+  mutate(
+    med_school_year = fct_infreq(med_school_year %>% str_wrap(width = 25))
+  ) %>% 
+  ggplot(aes(x = med_school_year)) + 
+  geom_bar() + 
+  my_theme + 
+  labs(
+    x = NULL, 
+    y = "Number of students", 
+    caption = str_glue("N = ", {n})
+  )
+```
+
+
+### Do you identify as LGBTQ+?
+
+```{r}
+n <- 
+  na_data %>% 
+  filter(!is.na(is_lgbtq)) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  drop_na(is_lgbtq) %>% 
+  ggplot(aes(x = is_lgbtq)) + 
+  geom_bar() + 
+  labs(
+    x = NULL, 
+    y = "Number of respondents", 
+    caption = str_glue("N = {n}")
+  )
+```
+
+### What is your sex assigned at birth?
+
+```{r}
+n <- 
+  na_data %>% 
+  filter(!is.na(sex)) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  drop_na(sex) %>% 
+  ggplot(aes(x = sex)) + 
+  geom_bar() + 
+  theme(
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(size = 16)
+  ) + 
+  labs(
+    x = NULL, 
+    y = "Number of students", 
+    caption = str_glue("N = {n}")
+  )
+  
+```
+
+### What is your gender identity?
+
+```{r}
+n <- 
+  na_data %>% 
+  filter_at(
+    .vars = vars(starts_with("gender_")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  summarize_at(
+    .vars = vars(starts_with("gender")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-gender_another_description) %>% 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "gender", 
+    values_to = "Number of respondents", 
+    names_prefix = "gender_"
+  ) %>% 
+  mutate(
+    gender = fct_reorder(gender, desc(`Number of respondents`)), 
+    percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
+  ) %>% 
+  ggplot(aes(x = gender, y = `Number of respondents`)) + 
+  geom_col() + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 15, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    )
+  ) + 
+  labs(
+    x = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+

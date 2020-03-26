@@ -1,11 +1,12 @@
-Needs Assessment General Report
+Needs Assessment Report
 ================
 Timothy Keyes
-2020-03-24
+2020-03-26
 
-  - [General data summary](#general-data-summary)
+  - [Broad data and recruitment
+    summary](#broad-data-and-recruitment-summary)
   - [Wrangling](#wrangling)
-  - [General Demographics report](#general-demographics-report)
+  - [Univariate Demographics report](#univariate-demographics-report)
       - [What school do you attend?](#what-school-do-you-attend)
       - [What year of medical school are you
         in?](#what-year-of-medical-school-are-you-in)
@@ -13,15 +14,47 @@ Timothy Keyes
       - [What is your sex assigned at
         birth?](#what-is-your-sex-assigned-at-birth)
       - [What is your gender identity?](#what-is-your-gender-identity)
+      - [What is your sexual
+        orientation?](#what-is-your-sexual-orientation)
+      - [What is your racial/ethnic
+        background?](#what-is-your-racialethnic-background)
+      - [Program type](#program-type)
+  - [Number of unique medical
+    schools](#number-of-unique-medical-schools)
+  - [Do medical students think MSPA is a good
+    idea?](#do-medical-students-think-mspa-is-a-good-idea)
+      - [Intercollegiate engagement of LGBTQ+ affinity
+        organizations](#intercollegiate-engagement-of-lgbtq-affinity-organizations)
+      - [Perceived benefit from a national LGBTQ+ affinity organization
+        for medical
+        students](#perceived-benefit-from-a-national-lgbtq-affinity-organization-for-medical-students)
+      - [Which of your school’s activities would be enhanced by a
+        national LGBTQ+ medical student
+        organization?](#which-of-your-schools-activities-would-be-enhanced-by-a-national-lgbtq-medical-student-organization)
 
 ``` r
 # Libraries
 library(tidyverse)
 library(lubridate)
+library(likert)
 
 # Parameters
 input_path <- here::here("data", "mspa_na_data.rds")
 metadata_path <- here::here("data-raw", "school_metadata.csv")
+
+total_md <- 153
+total_do <- 36
+
+likert_colors <- c("darkgreen","green","orange","red","darkred")
+
+likert_labels <- 
+  c(
+    "Strongly disagree",
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
 
 my_theme <- 
   theme(
@@ -40,10 +73,11 @@ na_data <-
 
 metadata <- 
   metadata_path %>% 
-  read_csv()
+  read_csv() %>% 
+  drop_na()
 ```
 
-## General data summary
+## Broad data and recruitment summary
 
 First, we want to see if we were able to obtain consent from everyone
 who took the survey:
@@ -63,7 +97,7 @@ Thus, we can see that there are 32 people who didn’t actually check the
 “consent” box. They will need to be removed from the analysis.
 
 We can also look, for our own purposes, of the number of responses over
-time window that the survey was open.
+the time window that the survey was open.
 
 ``` r
 na_data %>% 
@@ -80,10 +114,6 @@ na_data %>%
     y = "Responses (# of students per day)"
   )
 ```
-
-    ## Warning: 26 failed to parse.
-
-    ## Warning: Removed 1 rows containing missing values (geom_path).
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
@@ -168,7 +198,12 @@ some other architecture that leverages our campus network).
 
 ## Wrangling
 
-First, we want to remove people who did not consent to the survey.
+I’ve already done some data cleaning in previous scripts, but there are
+still a few tweaks that we probably want to make so that everything is
+human-readable and so that only useful information is carried forward.
+
+First, we want to remove people who did not consent to the survey, since
+we can’t use their information anyway.
 
 ``` r
 na_data <- 
@@ -196,10 +231,11 @@ na_data <-
         sab_is_female == "yes" ~ "female", 
         TRUE                   ~ NA_character_
       )
-  )
+  ) %>% 
+  left_join(metadata, by = c("school_attend" = "name"))
 ```
 
-## General Demographics report
+## Univariate Demographics report
 
 The first section of the survey asked questions about respondents’
 demographic identifiers, including the following:
@@ -236,14 +272,14 @@ na_data %>%
 | :------------------------------------------------------------------------------------ | ------------------: | ----------------------------: |
 | Temple University School of Medicine                                                  |                  84 |                           7.3 |
 | University of Louisville School of Medicine                                           |                  62 |                           5.4 |
-| University of Oklahoma College of Medicine                                            |                  57 |                           5.0 |
+| University of Oklahoma College of Medicine                                            |                  57 |                           4.9 |
 | Geisinger Commonwealth School of Medicine                                             |                  44 |                           3.8 |
 | Stanford University School of Medicine                                                |                  40 |                           3.5 |
 | University of Pittsburgh School of Medicine                                           |                  39 |                           3.4 |
 | University of New Mexico School of Medicine                                           |                  37 |                           3.2 |
-| Saint Louis University School of Medicine                                             |                  34 |                           3.0 |
-| University of Alabama School of Medicine                                              |                  34 |                           3.0 |
-| University of Arkansas for Medical Sciences/UAMS College of Medicine                  |                  34 |                           3.0 |
+| Saint Louis University School of Medicine                                             |                  34 |                           2.9 |
+| University of Alabama School of Medicine                                              |                  34 |                           2.9 |
+| University of Arkansas for Medical Sciences/UAMS College of Medicine                  |                  34 |                           2.9 |
 | Johns Hopkins University School of Medicine                                           |                  32 |                           2.8 |
 | University of Michigan Medical School                                                 |                  32 |                           2.8 |
 | Western Michigan University Homer Stryker M.D. School of Medicine                     |                  30 |                           2.6 |
@@ -270,6 +306,7 @@ na_data %>%
 | University of Iowa Roy J. and Lucille A. Carver College of Medicine                   |                   9 |                           0.8 |
 | Vanderbilt University School of Medicine                                              |                   9 |                           0.8 |
 | West Virginia University School of Medicine                                           |                   9 |                           0.8 |
+| Edward Via College of Osteopathic Medicine                                            |                   8 |                           0.7 |
 | Keck School of Medicine of University of Southern California                          |                   8 |                           0.7 |
 | University of North Texas Health Science Center Texas College of Osteopathic Medicine |                   8 |                           0.7 |
 | Baylor College of Medicine                                                            |                   7 |                           0.6 |
@@ -285,10 +322,10 @@ na_data %>%
 | Northwestern University Feinberg School of Medicine                                   |                   5 |                           0.4 |
 | University of California, Davis School of Medicine                                    |                   5 |                           0.4 |
 | University of Florida College of Medicine                                             |                   5 |                           0.4 |
-| Edward Via College of Osteopathic Medicine                                            |                   4 |                           0.3 |
 | Pennsylvania State University College of Medicine                                     |                   4 |                           0.3 |
 | Perelman School of Medicine at the University of Pennsylvania                         |                   4 |                           0.3 |
 | Philadelphia College of Osteopathic Medicine                                          |                   4 |                           0.3 |
+| Touro College of Osteopathic Medicine                                                 |                   4 |                           0.3 |
 | University of Utah School of Medicine                                                 |                   4 |                           0.3 |
 | University of Washington School of Medicine                                           |                   4 |                           0.3 |
 | Medical College of Wisconsin                                                          |                   3 |                           0.3 |
@@ -312,7 +349,6 @@ na_data %>%
 | Sanford School of Medicine of the University of South Dakota                          |                   2 |                           0.2 |
 | Stony Brook University School of Medicine                                             |                   2 |                           0.2 |
 | Texas Tech University Health Sciences Center School of Medicine                       |                   2 |                           0.2 |
-| Touro College of Osteopathic Medicine                                                 |                   2 |                           0.2 |
 | Touro University Nevada College of Osteopathic Medicine                               |                   2 |                           0.2 |
 | University of Arizona College of Medicine - Phoenix                                   |                   2 |                           0.2 |
 | University of Illinois at Urbana-Champaign Carle Illinois College of Medicine         |                   2 |                           0.2 |
@@ -473,3 +509,377 @@ na_data %>%
 ```
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+### What is your sexual orientation?
+
+``` r
+n <- 
+  na_data %>% 
+  filter_at(
+    .vars = vars(starts_with("so_")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  summarize_at(
+    .vars = vars(starts_with("so_")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-so_another_description) %>% 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "sexual_orientation", 
+    values_to = "Number of respondents", 
+    names_prefix = "so_"
+  ) %>% 
+  mutate(
+    sexual_orientation = fct_reorder(sexual_orientation, desc(`Number of respondents`)), 
+    percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
+  ) %>% 
+  ggplot(aes(x = sexual_orientation, y = `Number of respondents`)) + 
+  geom_col() + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 15, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    )
+  ) + 
+  labs(
+    x = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+### What is your racial/ethnic background?
+
+``` r
+n <- 
+  na_data %>% 
+  filter_at(
+    .vars = vars(starts_with("race_")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  count() %>% 
+  pull(n)
+
+na_data %>% 
+  summarize_at(
+    .vars = vars(starts_with("race_")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-race_another_explanation) %>% 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "race", 
+    values_to = "Number of respondents", 
+    names_prefix = "race_"
+  ) %>% 
+  mutate(
+    race = fct_reorder(race, desc(`Number of respondents`)), 
+    percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
+  ) %>% 
+  ggplot(aes(x = race, y = `Number of respondents`)) + 
+  geom_col() + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 15, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    )
+  ) + 
+  scale_x_discrete(
+    labels = 
+      c("White", "Asian", "Hispanic", 
+        "Black", "Another", "Native", 
+        "Pacific Islander")
+  ) + 
+  labs(
+    x = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+So we can see that most of the respondents are white, a group that
+accounts for about 2/3 of the total responses. There are a smaller
+percentage of Asian, Hispanic, and Black respondents, with Native,
+Pacific Islander, and “Other” groups corresponding to around 1% of the
+responses, each.
+
+### Program type
+
+With merged data about the school that each student attends, we can also
+compare the number of MD and the number of DO students who responded to
+the survey:
+
+``` r
+n <- 
+  na_data %>% 
+  filter(!is.na(Degree)) %>% 
+  count() %>%
+  pull(n)
+
+na_data %>% 
+  drop_na(Degree) %>% 
+  count(Degree, name = "Number of respondents") %>% 
+  mutate(
+    Degree = fct_reorder(Degree, desc(`Number of respondents`)), 
+    percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
+  ) %>% 
+  ggplot(aes(x = Degree, y = `Number of respondents`)) + 
+  geom_col() + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 20, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    )
+  ) + 
+  labs(
+    title = "Number of responses from MD- and DO-granting programs", 
+    x = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+Thus, we can see that the number of DO student responses is relatively
+small relative to the number of MD students.
+
+## Number of unique medical schools
+
+According to the Association of American Medical Colleges, there are
+[153 accredited MD-granting programs in the United
+States](https://www.aamc.org/data-reports/students-residents/interactive-data/2019-facts-applicants-and-matriculants-data);
+likewise, the American Association of Colleges of Osteopathic Medicine
+(AACOM) [accredits 36 DO-granting
+programs](https://www.aacom.org/become-a-doctor/u-s-colleges-of-osteopathic-medicine)
+in the United States.
+
+So, we can compute the number of unique MD and unique DO schools (as
+well as their percentage of the national numbers).
+
+``` r
+totals <- tibble(Degree = c("DO", "MD"), total = c(total_do, total_md))
+
+na_data %>% 
+  select(school_attend, Degree) %>%
+  drop_na() %>% 
+  distinct() %>%
+  count(Degree) %>% 
+  left_join(totals, by = "Degree") %>% 
+  mutate(proportion = n / total) %>% 
+  knitr::kable()
+```
+
+| Degree |   n | total | proportion |
+| :----- | --: | ----: | ---------: |
+| DO     |  18 |    36 |  0.5000000 |
+| MD     | 100 |   153 |  0.6535948 |
+
+So, we can see that we have 100 MD schools (65% of total schools), and
+18 DO schools (50% of total).
+
+However, we remember from our response plots above that most of the
+schools from which we have responses only have a few (\<5) students who
+responded…this is a problem we will either have to solve or something
+that we will have to wordsmith around.
+
+## Do medical students think MSPA is a good idea?
+
+In the second section of the needs-assessment survey, we asked questions
+about intercollegiate LGBTQ+ affinity group engagement and whether or
+not students felt that a national LGBTQ+ affinity organization would
+enhance their school’s LGBTQ+ diversity/inclusion climate.
+
+Here’s a generally useful function for plotting likert scale data that
+we’ll use throughout this section:
+
+``` r
+## description: plots a stacked bar plot between LGBTQ+ and non-LGBTQ+ individuals when the likert scale is 
+##              encoded by the variable my_var. Will provide the plot with the title `title` and the caption 
+##              N = `n`. 
+likert_plot <- function(my_var = NULL, title = NULL, n = NULL) { 
+  na_data %>% 
+    drop_na({{my_var}}, is_lgbtq) %>% 
+    group_by(is_lgbtq, {{my_var}}) %>% 
+    summarize(number = n()) %>% 
+    mutate(proportion = number / sum(number)) %>% 
+    ggplot(
+      aes(
+        x = is_lgbtq, 
+        y = proportion, 
+        fill = factor({{my_var}}, levels = as.character(5:1))
+      )
+    ) + 
+    geom_hline(yintercept = 0.5, color = "black") + 
+    geom_col() + 
+    scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+    scale_fill_brewer(
+      labels = rev(likert_labels), 
+      type = "div",
+      palette = "RdYlGn", 
+      aesthetics = "fill", 
+      direction = -1, 
+      guide = guide_legend(reverse = TRUE)
+    ) + 
+    coord_flip() + 
+    theme(
+      legend.title = element_text(size = 9),
+      aspect.ratio = 0.4, 
+      legend.position = "bottom"
+    ) +  
+    labs(
+      subtitle = title,
+      x = NULL,
+      y = "Percentage of respondents", 
+      fill = NULL,
+      caption = str_glue("N = {n}")
+    )
+}
+```
+
+### Intercollegiate engagement of LGBTQ+ affinity organizations
+
+**By individual - each person is a point**
+
+``` r
+#agree
+n <- 
+  na_data %>% 
+  drop_na(interaction_agree, is_lgbtq) %>% 
+  count() %>% 
+  pull(n)
+
+likert_plot(
+  my_var = interaction_agree, 
+  title = 
+    "\"The LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"",
+  n = n
+)
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+``` r
+#satisfied
+n <- 
+  na_data %>% 
+  drop_na(interaction_satisfaction, is_lgbtq) %>% 
+  count() %>% 
+  pull(n)
+
+likert_plot(
+  my_var = interaction_satisfaction, 
+  title = 
+    "\"I am satisfied with the degree to which the LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"",
+  n = n
+)
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-2.png)<!-- -->
+
+From the above plots, note that we put a black reference line at 50% in
+order to indicate that the majority of LGBTQ-identifying medical
+students both disagree with the statement that their local LGBTQ+
+affinity organization interacts with the larger LGBTQ+ community *and*
+that they are not satisfied with the level of intercollegiate
+interaction that they do have.
+
+**By school - each school is a point**
+
+If we take each unique school and average the likert scale ratings, we
+can make box-and-whisker plots to summarize the data in a slightly
+different way.
+
+``` r
+var_labels <- 
+  setNames(
+    object = , 
+      c(
+        "\"The LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"" %>% 
+          str_wrap(width = 50), 
+        "\"I am satisfied with the degree to which the LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"" %>% 
+          str_wrap(width = 50)
+      ), 
+    nm = c("agree", "satisfaction")
+  )
+
+
+na_data %>% 
+  drop_na(Degree, is_lgbtq) %>% 
+  group_by(school_attend, is_lgbtq) %>% 
+  summarize_at(
+    vars(starts_with("interaction_")), 
+    mean, 
+    na.rm = TRUE
+  ) %>% 
+  pivot_longer(
+    cols = starts_with("interaction_"), 
+    names_to = "variable", 
+    values_to = "value", 
+    names_prefix = "interaction_"
+  ) %>% 
+  ggplot(aes(x = is_lgbtq, y = value, fill = is_lgbtq)) + 
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.4, stroke = 0, color = "black") + 
+  facet_wrap(vars(variable), labeller = labeller(variable = var_labels)) + 
+  scale_y_continuous(minor_breaks = NULL) + 
+  labs(
+    subtitle = "", 
+    x = NULL, 
+    y = "Mean likert score across all respondents (1-5)", 
+    fill = NULL
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+
+### Perceived benefit from a national LGBTQ+ affinity organization for medical students
+
+**Personal Benefit**
+
+On an individual level…
+
+``` r
+n <- 
+  na_data %>% 
+  drop_na(is_lgbtq, personal_benefit_mspa) %>% 
+  count() %>% 
+  pull(n)
+
+likert_plot(
+  my_var = personal_benefit_mspa, 
+  title = "I would personally benefit from a national LGBTQ+ affinity organization", 
+  n = n
+)
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+**Community benefit:**
+
+On an individual level…
+
+``` r
+n <- 
+  na_data %>% 
+  drop_na(is_lgbtq, community_benefit_mspa) %>% 
+  count() %>% 
+  pull(n)
+
+likert_plot(
+  my_var = personal_benefit_mspa, 
+  title = 
+    "My community would  benefit from a national LGBTQ+ affinity organization", 
+  n = n
+)
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+### Which of your school’s activities would be enhanced by a national LGBTQ+ medical student organization?

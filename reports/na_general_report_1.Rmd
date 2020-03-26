@@ -579,7 +579,7 @@ intercollegiate interaction that they do have.
 
 If we take each unique school and average the likert scale ratings, we can make box-and-whisker plots to summarize the data in a slightly different way. 
 
-```{r, fig.width = 5}
+```{r, fig.width = 8}
 var_labels <- 
   setNames(
     object = , 

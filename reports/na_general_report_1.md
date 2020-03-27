@@ -31,12 +31,15 @@ Timothy Keyes
       - [Which of your school’s activities would be enhanced by a
         national LGBTQ+ medical student
         organization?](#which-of-your-schools-activities-would-be-enhanced-by-a-national-lgbtq-medical-student-organization)
+  - [Current-state assessment of local LGBTQ+
+    organizations](#current-state-assessment-of-local-lgbtq-organizations)
+      - [Does your school have a medical student LGBTQ+ affinity
+        organization?](#does-your-school-have-a-medical-student-lgbtq-affinity-organization)
 
 ``` r
 # Libraries
 library(tidyverse)
 library(lubridate)
-library(likert)
 
 # Parameters
 input_path <- here::here("data", "mspa_na_data.rds")
@@ -580,6 +583,7 @@ na_data %>%
   ) %>% 
   mutate(
     race = fct_reorder(race, desc(`Number of respondents`)), 
+    #this is wrong -> denominator should be n, not the sum
     percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
   ) %>% 
   ggplot(aes(x = race, y = `Number of respondents`)) + 
@@ -783,7 +787,7 @@ likert_plot(
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-2.png)<!-- -->
 
-From the above plots, note that we put a black reference line at 50% in
+In the above plots, note that we put a black reference line at 50% in
 order to indicate that the majority of LGBTQ-identifying medical
 students both disagree with the statement that their local LGBTQ+
 affinity organization interacts with the larger LGBTQ+ community *and*
@@ -808,7 +812,6 @@ var_labels <-
       ), 
     nm = c("agree", "satisfaction")
   )
-
 
 na_data %>% 
   drop_na(Degree, is_lgbtq) %>% 
@@ -861,6 +864,12 @@ likert_plot(
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
+So, it’s clear that the majority of LGBTQ+-identifying students feel
+that they would personally benefit from the existence of an organization
+like MSPA, with nearly 50% strongly agreeing with this statement. By
+contrast, most non-LGBTQ+ students didn’t feel that they would
+necessarily benefit from such an organization personally.
+
 **Community benefit:**
 
 On an individual level…
@@ -873,7 +882,7 @@ n <-
   pull(n)
 
 likert_plot(
-  my_var = personal_benefit_mspa, 
+  my_var = community_benefit_mspa, 
   title = 
     "My community would  benefit from a national LGBTQ+ affinity organization", 
   n = n
@@ -882,4 +891,275 @@ likert_plot(
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
+Here, we see that over 50% of all LGBTQ+ students feel that the
+existence of an organization such as MSPA would benefit their overall
+community (even if it doesn’t benefit them personally), with over 80%
+indicating some degree of agreement.
+
+In addition, this plot shows us that most non-LGBTQ+ students **also**
+agree that the existence of an organization like MSPA would benefit the
+community, even if they themselves won’t necessarily benefit from the
+org’s existence personally.
+
 ### Which of your school’s activities would be enhanced by a national LGBTQ+ medical student organization?
+
+``` r
+affinity_recode <- 
+  c(
+    "lgbtq_meded" = "LGBTQ+ health education",
+    "social" = "LGBTQ+ social events", 
+    "di_training" = "Health care provider diversity/inclusion training",
+    "discrim_bias_reduction" = "Discrimination and bias reduction", 
+    "mentorship" = "Physician mentorship for LGBTQ+ students",
+    "advocacy" = "LGBTQ+ political/social advocacy",
+    "global_health" = "LGBTQ+ Global Health",
+    "other" = "Other"
+  )
+
+n <- 
+  na_data %>% 
+ filter_at(
+    .vars = vars(starts_with("enhanced_activity")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  drop_na(is_lgbtq) %>% 
+  count() %>% 
+  pull(n)
+  
+
+na_data %>% 
+ filter_at(
+    .vars = vars(starts_with("enhanced_activity")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  drop_na(is_lgbtq) %>% 
+  summarize_at(
+    vars(starts_with("enhanced_activity")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-enhanced_activity_mspa_other_explanation) %>% 
+  pivot_longer(
+    cols = starts_with("enhanced_activity"), 
+    names_to = "activity", 
+    values_to = "Number of respondents", 
+    names_prefix = "enhanced_activity_mspa_"
+  ) %>% 
+  mutate(
+    activity = 
+      fct_reorder(activity, desc(`Number of respondents`)) %>% 
+      dplyr::recode(!!! affinity_recode),
+    percentage = (`Number of respondents` / n) * 100
+  ) %>% 
+  ggplot(aes(x = activity, y = `Number of respondents`)) + 
+  geom_col() + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 50, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    )
+  ) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  coord_flip() + 
+  labs(
+    subtitle = "Students feel that a national LGBTQ+ org will most enhance medical\neducation, advocacy, diversity & inclusion training, and LGBTQ+ mentorship", 
+    x = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
+The plot above shows that the number 1 item that students felt would be
+enhanced by an organization like MSPA existing would be LGBTQ+ health
+education and curriculur design.
+
+But we can also see that 2.3% felt that “other” activities would be
+enhanced. What were those?
+
+``` r
+na_data %>% 
+  select(enhanced_activity_mspa_other_explanation) %>%
+  distinct() %>% 
+  knitr::kable()
+```
+
+| enhanced\_activity\_mspa\_other\_explanation |
+| :------------------------------------------- |
+| NA                                           |
+
+Funnily enough, no one provided any text in the free text box\! Oh well.
+
+Of course, the data about are aggregated - the question still remains:
+did SGM and non-SGM feel differently about what activities would be
+enhanced by MSPA?
+
+``` r
+ns <- 
+  na_data %>% 
+  filter_at(
+    .vars = vars(starts_with("enhanced_activity")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  drop_na(is_lgbtq) %>% 
+  count(is_lgbtq)
+  
+na_data %>% 
+  filter_at(
+    .vars = vars(starts_with("enhanced_activity")), 
+    .vars_predicate = any_vars(!is.na(.))
+  ) %>% 
+  drop_na(is_lgbtq) %>% 
+  group_by(is_lgbtq) %>% 
+  summarize_at(
+    vars(starts_with("enhanced_activity")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-enhanced_activity_mspa_other_explanation) %>% 
+  pivot_longer(
+    cols = starts_with("enhanced_activity"), 
+    names_to = "activity", 
+    values_to = "Number of respondents", 
+    names_prefix = "enhanced_activity_mspa_"
+  ) %>% 
+  left_join(ns, by = "is_lgbtq") %>% 
+  mutate(
+    activity = 
+      fct_reorder2(activity, desc(is_lgbtq), desc(`Number of respondents`)) %>% 
+      dplyr::recode(!!! affinity_recode),
+    percentage = (`Number of respondents` / n) * 100, 
+    is_lgbtq = fct_relevel(is_lgbtq, "Non-LGBTQ+", "LGBTQ+")
+  ) %>% 
+  ggplot(aes(x = activity, y = `Number of respondents`, fill = is_lgbtq)) + 
+  geom_col(position = "dodge") + 
+  geom_text(
+    aes(
+      y = `Number of respondents` + 35, 
+      label = str_c(percentage %>% round(digits = 1), "%")
+    ), 
+    position = position_dodge(width = 0.8)
+  ) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(limits = c(NA, 570)) + 
+  scale_fill_manual(values = c("#00BFC4", "#F8766D")) + 
+  coord_flip() + 
+  labs(
+    subtitle = "LGBTQ+ students feel that a national LGBTQ+ org will most enhance medical\neducation, advocacy, mentorship, and social evente", 
+    x = NULL, 
+    fill = NULL, 
+    caption = ""
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+These data tell a slightly different story: LGBTQ+ students still think
+MSPA’s greatest strength will be in enhancing LGBTQ+ medical education
+and political/social advocacy, but they tend to think mentorship and
+social events will be more enhanced than non-LGBTQ+ students do.
+
+## Current-state assessment of local LGBTQ+ organizations
+
+Our needs assessment also included several questions about what
+students’ local affinity organizations were like. The variables we
+measured included the following:
+
+  - Does your school have a medical student LGBTQ+ organization of some
+    kind?
+  - If no, do you think this is something you would benefit from?
+  - If yes, are you involved in that organization in some way? If not,
+    why not?
+  - Which of the following student group activies do you engage in?
+
+### Does your school have a medical student LGBTQ+ affinity organization?
+
+``` r
+n <- 
+  na_data %>% 
+  drop_na(Degree, school_affinity_group_exist) %>% 
+  pull(school_attend) %>% 
+  n_distinct()
+
+percentage_schools <- 
+  na_data %>% 
+  drop_na(Degree, school_affinity_group_exist) %>% 
+  group_by(school_attend) %>% 
+  count(school_affinity_group_exist) %>% 
+  filter(n == max(n)) %>% 
+  pull(school_affinity_group_exist) %>% 
+  `==`("yes") %>% 
+  mean() * 
+  100
+```
+
+Thus, we can see that 90.8% of our 118 schools have a local affinity
+LGBTQ+ affinity organization.
+
+The schools that don’t are as follows:
+
+``` r
+na_data %>% 
+  drop_na(Degree, school_affinity_group_exist) %>% 
+  group_by(school_attend) %>% 
+  count(school_affinity_group_exist) %>% 
+  filter(n == max(n)) %>% 
+  filter(school_affinity_group_exist == "no") %>% 
+  select(school_attend) %>% 
+  rename(
+    `Medical schools without LGBTQ+ affinity organizations` = school_attend
+  ) %>% 
+  knitr::kable()
+```
+
+| Medical schools without LGBTQ+ affinity organizations                         |
+| :---------------------------------------------------------------------------- |
+| Creighton University School of Medicine                                       |
+| Edward Via College of Osteopathic Medicine                                    |
+| Loma Linda University School of Medicine                                      |
+| Marian University College of Osteopathic Medicine                             |
+| Meharry Medical College School of Medicine                                    |
+| Ohio University Heritage College of Osteopathic Medicine                      |
+| Sanford School of Medicine of the University of South Dakota                  |
+| Southern Illinois University School of Medicine                               |
+| University of Illinois at Urbana-Champaign Carle Illinois College of Medicine |
+| University of Nebraska College of Medicine                                    |
+| Washington State University Elson S. Floyd College of Medicine                |
+
+So, for the students at these schools, do they think it’d be beneficial
+to have one?
+
+``` r
+ns <- 
+  na_data %>% 
+  filter(school_affinity_group_exist == "no") %>% 
+  count(is_lgbtq)
+
+na_data %>% 
+  filter(school_affinity_group_exist == "no") %>% 
+  group_by(is_lgbtq) %>% 
+  summarize(
+    number = sum(school_affinity_group_benefit == 1, na.rm = TRUE), 
+    total = n(),
+    prop = number / total
+  ) %>% 
+  ggplot(aes(x = is_lgbtq, y = prop, fill = is_lgbtq)) + 
+  geom_col() + 
+  scale_y_continuous(
+    breaks = scales::breaks_width(width = 0.2), 
+    labels = scales::label_percent(accuracy = 1)
+  ) + 
+  coord_fixed(2) + 
+  theme(legend.position = "none") + 
+  labs(
+    subtitle = "\"Do you feel that an LGBTQ+ affinity organization is something you would benefit from?\"",
+    x = NULL, 
+    y = "Percentage of respondents who answered \"yes\"", 
+    fill = NULL, 
+    caption = str_c("N(LGBTQ+) = ", ns$n[[1]], "\nN(non-LGBTQ+) = ", ns$n[[2]])
+  ) 
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+
+So, we can see that over 80% of LGBTQ+ students do feel that it’s
+something they would benefit from, but there’s not a ton of strong
+allyship going on (clearly).

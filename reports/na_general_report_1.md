@@ -1,7 +1,7 @@
 Needs Assessment Report
 ================
 Timothy Keyes
-2020-03-26
+2020-03-27
 
   - [Broad data and recruitment
     summary](#broad-data-and-recruitment-summary)
@@ -40,6 +40,7 @@ Timothy Keyes
 # Libraries
 library(tidyverse)
 library(lubridate)
+library(waffle)
 
 # Parameters
 input_path <- here::here("data", "mspa_na_data.rds")
@@ -66,6 +67,8 @@ my_theme <-
     axis.title.y = element_text(size = 12, face = "bold"), 
     axis.title.x = element_text(size = 12, face = "bold")
   ) 
+
+mspa_hex <- "#666699"
 
 #===============================================================================
 
@@ -410,7 +413,7 @@ na_data %>%
     med_school_year = fct_infreq(med_school_year %>% str_wrap(width = 25))
   ) %>% 
   ggplot(aes(x = med_school_year)) + 
-  geom_bar() + 
+  geom_bar(fill = mspa_hex) + 
   my_theme + 
   labs(
     x = NULL, 
@@ -426,14 +429,22 @@ na_data %>%
 ``` r
 n <- 
   na_data %>% 
-  filter(!is.na(is_lgbtq)) %>% 
-  count() %>% 
+  drop_na(is_lgbtq) %>% 
+  count() %>%
   pull(n)
+
+ns <- 
+  na_data %>% 
+  drop_na(is_lgbtq) %>% 
+  count(is_lgbtq)
+
+n_lgbtq <- ns$n[[1]]
+n_n_lgbtq <- ns$n[[2]]
 
 na_data %>% 
   drop_na(is_lgbtq) %>% 
   ggplot(aes(x = is_lgbtq)) + 
-  geom_bar() + 
+  geom_bar(fill = mspa_hex) + 
   labs(
     x = NULL, 
     y = "Number of respondents", 
@@ -442,6 +453,44 @@ na_data %>%
 ```
 
 ![](na_general_report_1_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+Or visualized slightly differently…
+
+``` r
+na_data %>% 
+  drop_na(is_lgbtq) %>% 
+  count(is_lgbtq) %>% 
+  ggplot(aes(fill = is_lgbtq, values = n)) + 
+  geom_waffle(color = "white", n_rows = 25, size = 0.25, make_proportional = FALSE) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 25, 
+    expand = c(0, 0)
+  ) +
+  scale_fill_manual(
+    name = NULL, 
+    labels = 
+      c(
+        str_glue("LGBTQ+\n({n_lgbtq})"), 
+        str_glue("Non-LGBTQ+\n({n_n_lgbtq})")
+      ),
+    values = c(mspa_hex, "gray60")
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line(), 
+    legend.position = "bottom"
+  ) + 
+  labs(
+    subtitle = "Do you identify as LGBTQ+?",
+    x = "Number of students"
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ### What is your sex assigned at birth?
 
@@ -467,7 +516,51 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+Or, visualized slightly differently…
+
+``` r
+ns <- 
+  na_data %>% 
+  filter(!is.na(sex)) %>% 
+  count(sex)
+
+n_male <- ns$n[[2]]
+n_female <- ns$n[[1]]
+
+ns %>% 
+  ggplot(aes(fill = sex, values = n)) + 
+  geom_waffle(color = "white", n_rows = 21, size = 0.25, make_proportional = FALSE) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 21, 
+    expand = c(0, 0)
+  ) +
+  ggthemes::scale_fill_tableau(
+    name = NULL, 
+    labels = 
+      c(
+        str_glue("Female\n({n_female})"), 
+        str_glue("Male\n({n_male})")
+      ),
+    palette = "Tableau 10"
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line(), 
+    legend.position = "bottom"
+  ) + 
+  labs(
+    subtitle = "What was your sex assigned at birth?",
+    x = "Number of students"
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ### What is your gender identity?
 
@@ -511,7 +604,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ### What is your sexual orientation?
 
@@ -555,7 +648,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ### What is your racial/ethnic background?
 
@@ -583,8 +676,7 @@ na_data %>%
   ) %>% 
   mutate(
     race = fct_reorder(race, desc(`Number of respondents`)), 
-    #this is wrong -> denominator should be n, not the sum
-    percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
+    percentage = (`Number of respondents` / n) * 100
   ) %>% 
   ggplot(aes(x = race, y = `Number of respondents`)) + 
   geom_col() + 
@@ -606,7 +698,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 So we can see that most of the respondents are white, a group that
 accounts for about 2/3 of the total responses. There are a smaller
@@ -649,10 +741,55 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 Thus, we can see that the number of DO student responses is relatively
 small relative to the number of MD students.
+
+We can appreciate this sligtly better with a waffle visualization:
+
+``` r
+ns <- 
+  na_data %>% 
+  filter(!is.na(Degree)) %>% 
+  count(Degree)
+n_md <- ns$n[[2]]
+n_do <- ns$n[[1]]
+
+na_data %>% 
+  drop_na(Degree) %>% 
+  count(Degree) %>% 
+  ggplot(aes(fill = Degree, values = n)) + 
+  geom_waffle(color = "white", n_rows = 21, size = 0.25, make_proportional = FALSE) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 21, 
+    expand = c(0, 0)
+  ) +
+  ggthemes::scale_fill_tableau(
+    name = NULL, 
+    labels = 
+      c(
+        str_glue("DO ({n_do})"), 
+        str_glue("MD ({n_md})")
+      ),
+    palette = "Tableau 10"
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line(), 
+    legend.position = "bottom"
+  ) + 
+  labs(
+    subtitle = "What degree does your program confer?",
+    x = "Number of students"
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ## Number of unique medical schools
 
@@ -767,7 +904,7 @@ likert_plot(
 )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
 #satisfied
@@ -785,7 +922,7 @@ likert_plot(
 )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-19-2.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-22-2.png)<!-- -->
 
 In the above plots, note that we put a black reference line at 50% in
 order to indicate that the majority of LGBTQ-identifying medical
@@ -840,7 +977,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ### Perceived benefit from a national LGBTQ+ affinity organization for medical students
 
@@ -862,7 +999,7 @@ likert_plot(
 )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 So, it’s clear that the majority of LGBTQ+-identifying students feel
 that they would personally benefit from the existence of an organization
@@ -889,7 +1026,7 @@ likert_plot(
 )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 Here, we see that over 50% of all LGBTQ+ students feel that the
 existence of an organization such as MSPA would benefit their overall
@@ -967,7 +1104,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 The plot above shows that the number 1 item that students felt would be
 enhanced by an organization like MSPA existing would be LGBTQ+ health
@@ -1050,7 +1187,7 @@ na_data %>%
   )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 These data tell a slightly different story: LGBTQ+ students still think
 MSPA’s greatest strength will be in enhancing LGBTQ+ medical education
@@ -1154,12 +1291,63 @@ na_data %>%
     x = NULL, 
     y = "Percentage of respondents who answered \"yes\"", 
     fill = NULL, 
-    caption = str_c("N(LGBTQ+) = ", ns$n[[1]], "\nN(non-LGBTQ+) = ", ns$n[[2]])
-  ) 
+    caption = 
+        expression(
+          paste(N["LGBTQ+"], " = ", 26, ";  ", N["non-LGBTQ+"], " = ", 33)
+        )
+  )
 ```
 
-![](na_general_report_1_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 So, we can see that over 80% of LGBTQ+ students do feel that it’s
 something they would benefit from, but there’s not a ton of strong
 allyship going on (clearly).
+
+Shown a different way:
+
+``` r
+na_data %>% 
+  filter(school_affinity_group_exist == "no") %>% 
+  group_by(is_lgbtq) %>% 
+  summarize(
+    yes = sum(school_affinity_group_benefit == 1, na.rm = TRUE), 
+    no = sum(school_affinity_group_benefit == 2, na.rm = TRUE),
+    dont_know = sum(school_affinity_group_benefit == 3, na.rm = TRUE),
+  ) %>% 
+  pivot_longer(
+    cols = c(yes, no, dont_know), 
+    names_to = "response", 
+    values_to = "count"
+  ) %>% 
+  ggplot(aes(fill = response, values = count)) + 
+  geom_waffle(color = "white", n_rows = 3, size = 1, make_proportional = FALSE) + 
+  facet_wrap(~is_lgbtq, ncol = 1) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 3, 
+    expand = c(0, 0)
+  ) +
+  ggthemes::scale_fill_tableau(
+    name = NULL, 
+    breaks = c("yes", "no", "dont_know"), 
+    labels = c("Yes", "No", "Don't know")
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line()
+  ) + 
+  labs(
+    subtitle = "\"Do you feel that an LGBTQ+ affinity organization is something you would benefit from?\"",
+    x = "Number of students"
+  )
+```
+
+![](na_general_report_1_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+Visualized this way, we can see that straight people aren’t **that**
+problematic: they just aren’t sure if they would be benefitted by their
+school having an LGBTQ+ affinity organization.

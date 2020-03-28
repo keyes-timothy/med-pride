@@ -1,8 +1,10 @@
 ---
-title: "Needs Assessment Report" 
+title: "Needs Assessment Report (Part 1)" 
 author: "Timothy Keyes" 
 date: "`r Sys.Date()`"
 output: 
+  html_document: 
+    toc: true
   github_document:
     toc: true
 ---
@@ -1374,7 +1376,7 @@ na_data %>%
 
 
 
-## How can MSPA promote intersectionality in its acitivities? 
+## How can MSPA promote intersectionality in its activities? 
 
 We asked students for free-text responses to the following question: 
 

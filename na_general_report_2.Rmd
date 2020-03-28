@@ -1,0 +1,60 @@
+---
+title: "Needs Assessment Report (Part 2)" 
+author: "Timothy Keyes" 
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, dpi = 250)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(lubridate)
+library(waffle)
+
+# Parameters
+input_path <- here::here("data", "mspa_na_data.rds")
+metadata_path <- here::here("data-raw", "school_metadata.csv")
+
+total_md <- 153
+total_do <- 36
+
+likert_colors <- c("darkgreen","green","orange","red","darkred")
+
+likert_labels <- 
+  c(
+    "Strongly disagree",
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
+
+my_theme <- 
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+    axis.title.y = element_text(size = 12, face = "bold"), 
+    axis.title.x = element_text(size = 12, face = "bold")
+  ) 
+
+mspa_hex <- "#666699"
+
+#===============================================================================
+
+# read in data
+na_data <- 
+  input_path %>% 
+  read_rds()
+
+metadata <- 
+  metadata_path %>% 
+  read_csv() %>% 
+  drop_na()
+```
+

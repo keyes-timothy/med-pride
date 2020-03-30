@@ -100,8 +100,13 @@ md <-
   left_join(a_md, by = c("Chapter" = "medical_school")) %>% 
   transmute(
     medical_school = recode(Chapter, !!! recode_vars), 
-    chapter_name = `Chapter Name` %>% na_if("N/A") %>% na_if("0"), 
-    region
+    chapter_name = 
+      `Chapter Name` %>% 
+      na_if("N/A") %>% 
+      na_if("0") %>% 
+      replace_na(replace = "this chapter of MSPA"),
+    region, 
+    link
   ) 
   
 chapter_data <- 
@@ -115,6 +120,12 @@ chapter_data <-
 
 chapter_data$region[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
   "region 2"
+
+chapter_data$link[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
+  "http://njms.rutgers.edu/education/odace/lgbt/out.cfm"
+
+chapter_data$chapter_name[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
+  "Out@NJMS"
 ```
 
 
@@ -148,8 +159,23 @@ leaflet(width = 1000) %>%
     radius = 10,
     opacity = 0,
     fillOpacity = 0,
-    label = chapter_data$medical_school, 
-    data = chapter_data
+    label = 
+      chapter_data$medical_school %>% 
+      str_wrap(width = 20), 
+    data = chapter_data, 
+    popup = 
+      str_glue(
+        '<strong>Chapter Name:</strong> {chapter_name} <br> <strong>Chapter Region:</strong> {chapter_region} <br> Member of MSPA since {chapter_year} <br><a href="{link}">Learn more about {chapter_name}</a>', 
+        link = chapter_data$link, 
+        chapter_name = chapter_data$chapter_name, 
+        chapter_region = chapter_data$region %>% str_extract("[:digit:]"), 
+        chapter_year = 
+          sample(
+            x = c(2018:2020), 
+            size = length(chapter_data$region), 
+            replace = TRUE
+          )
+      )
   )
 ```
 

@@ -10,7 +10,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, dpi = 250)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, dpi = 250)
 ```
 
 ```{r message=FALSE, warning=FALSE}
@@ -35,6 +35,15 @@ likert_labels <-
     "Neither agree nor disagree", 
     "Somewhat agree", 
     "Strongly agree"
+  )
+
+interest_labels <- 
+  c(
+    "Not at all interested",
+    "Less interested", 
+    "Undecided", 
+    "Somewhat interested", 
+    "Very interested"
   )
 
 my_theme <- 
@@ -62,14 +71,15 @@ metadata <-
 
 ## Broad data and recruitment summary
 
-First, we want to see if we were able to obtain consent from everyone who took the survey: 
+First, we want to see if we were able to obtain consent from everyone who took the survey. 
 
 ```{r}
 na_data %>% 
-  count(consent)
+  count(consent) %>% 
+  knitr::kable()
 ```
 
-Thus, we can see that there are 32 people who didn't actually check the "consent" box. They will need to be removed from the analysis. 
+From looking at the consent data field, we can see that there are 32 people who didn't actually check the "consent" box. They will need to be removed from the analysis. 
 
 We can also look, for our own purposes, of the number of responses over the time window that the survey was open. 
 
@@ -83,7 +93,7 @@ na_data %>%
     labels = scales::label_date(format = "%b %Y")
   ) + 
   labs(
-    title = "Number of responses to the N-A survey by date", 
+    title = "Number of responses to the NA survey by date", 
     x = NULL, 
     y = "Responses (# of students per day)"
   )
@@ -189,6 +199,16 @@ na_data <-
         sab_is_male == "yes"   ~ "male", 
         sab_is_female == "yes" ~ "female", 
         TRUE                   ~ NA_character_
+      ), 
+    is_urm = if_else(race_white == "yes", "no", "yes"), 
+    is_gm = 
+      case_when(
+        gender_agender == "yes" ~ "yes", 
+        gender_genderqueer == "yes" ~ "yes", 
+        gender_transman == "yes" ~ "yes", 
+        gender_transwoman == "yes" ~ "yes", 
+        gender_another == "yes" ~ "yes", 
+        TRUE ~ "no"
       )
   ) %>% 
   left_join(metadata, by = c("school_attend" = "name"))
@@ -455,7 +475,7 @@ na_data %>%
     percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
   ) %>% 
   ggplot(aes(x = sexual_orientation, y = `Number of respondents`)) + 
-  geom_col() + 
+  geom_col(fill = mspa_hex) + 
   geom_text(
     aes(
       y = `Number of respondents` + 15, 
@@ -497,10 +517,10 @@ na_data %>%
     percentage = (`Number of respondents` / n) * 100
   ) %>% 
   ggplot(aes(x = race, y = `Number of respondents`)) + 
-  geom_col() + 
+  geom_col(fill = mspa_hex) + 
   geom_text(
     aes(
-      y = `Number of respondents` + 15, 
+      y = `Number of respondents` + 17, 
       label = str_c(percentage %>% round(digits = 1), "%")
     )
   ) + 
@@ -537,7 +557,7 @@ na_data %>%
     percentage = (`Number of respondents` / sum(`Number of respondents`)) * 100
   ) %>% 
   ggplot(aes(x = Degree, y = `Number of respondents`)) + 
-  geom_col() + 
+  geom_col(fill = mspa_hex) + 
   geom_text(
     aes(
       y = `Number of respondents` + 20, 
@@ -710,21 +730,21 @@ likert_plot(
 In the above plots, note that we put a black reference line at 50% in order to indicate that the majority of 
 LGBTQ-identifying medical students both disagree with the statement that their local LGBTQ+ affinity 
 organization interacts with the larger LGBTQ+ community *and* that they are not satisfied with the level of 
-intercollegiate interaction that they do have.
+intercollegiate interaction that they **do** have.
 
 **By school - each school is a point**
 
 If we take each unique school and average the likert scale ratings, we can make box-and-whisker plots to summarize the data in a slightly different way. 
 
-```{r, fig.width = 8}
+```{r, fig.width = 8, warning = FALSE}
 var_labels <- 
   setNames(
     object = , 
       c(
         "\"The LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"" %>% 
-          str_wrap(width = 50), 
+          str_wrap(width = 25), 
         "\"I am satisfied with the degree to which the LGBTQ+ community at my school interacts with the LGBTQ+ community at other institutions\"" %>% 
-          str_wrap(width = 50)
+          str_wrap(width = 25)
       ), 
     nm = c("agree", "satisfaction")
   )
@@ -749,7 +769,7 @@ na_data %>%
   facet_wrap(vars(variable), labeller = labeller(variable = var_labels)) + 
   scale_y_continuous(minor_breaks = NULL) + 
   scale_fill_manual(values = c(mspa_hex, "gray60")) + 
-  coord_fixed(1.8) + 
+  coord_fixed(1.4) + 
   labs(
     subtitle = "", 
     x = NULL, 
@@ -796,7 +816,7 @@ n <-
 likert_plot(
   my_var = community_benefit_mspa, 
   title = 
-    "My community would  benefit from a national LGBTQ+ affinity organization", 
+    "My community would benefit from a national LGBTQ+ affinity organization", 
   n = n
 )
 ```
@@ -859,7 +879,7 @@ na_data %>%
     percentage = (`Number of respondents` / n) * 100
   ) %>% 
   ggplot(aes(x = activity, y = `Number of respondents`)) + 
-  geom_col() + 
+  geom_col(fill = mspa_hex) + 
   geom_text(
     aes(
       y = `Number of respondents` + 50, 
@@ -1019,6 +1039,9 @@ ns <-
   filter(school_affinity_group_exist == "no") %>% 
   count(is_lgbtq)
 
+n_n_lgbtq <- ns$n[[2]]
+n_lgbtq <- ns$n[[1]]
+
 na_data %>% 
   filter(school_affinity_group_exist == "no") %>% 
   group_by(is_lgbtq) %>% 
@@ -1033,6 +1056,7 @@ na_data %>%
     breaks = scales::breaks_width(width = 0.2), 
     labels = scales::label_percent(accuracy = 1)
   ) + 
+  scale_fill_manual(values = c(mspa_hex, "gray60")) + 
   coord_fixed(2) + 
   theme(legend.position = "none") + 
   labs(
@@ -1231,6 +1255,12 @@ na_data %>%
 ```
 
 
+There are several interesting threads or themes that seem to emerge in these responses, including the following: 
+
+* The first response is very intense! 
+* Outness in professional contexts seems to be a barrier to involvement
+* Trans students and students of color may not identify with institutional affinity organizations because of the predominance of cisgender and white stakeholders who predominate the groups. 
+
 ### What does your local affinity organization do?
 
 ```{r}
@@ -1303,6 +1333,8 @@ na_data %>%
   )
 ```
 
+So we can see that LGBTQ+ student groups tend to focus on social events and educational programming more than other activities. Some participate directly in advocacy work, and relatively few have mentorship programs, intercollegiate engagement programs, or research teams. 
+
 ### LGBTQ+ student group assessment: mission, member support, and member identification
 
 We asked students a few big-picture questions about their school's LGBTQ+ affinity organization, including the following: 
@@ -1313,8 +1345,9 @@ We asked students a few big-picture questions about their school's LGBTQ+ affini
 
 Here are the results to those questions: 
 
-```{r}
+**student-by-student**
 
+```{r, fig.width = 8, message = FALSE, warning = FALSE}
 my_vars <- 
   c(
     "school_affinity_group_mission", 
@@ -1322,8 +1355,26 @@ my_vars <-
     "school_affinity_group_identify"
   )
 
+n <- 
+  na_data %>% 
+  select(one_of(my_vars, "is_lgbtq")) %>% 
+  drop_na() %>% 
+  count()
+
+variable_recode <- 
+  c(
+    "identify" = 
+      "I easily identify with members of my school's LGBTQ+ student group.", 
+    "mission" = 
+      "I feel that the LGBTQ+ medical student group at my school has a clear mission.", 
+    "supported" = 
+      "I feel supported by the LGBTQ+ medical student group at my medical school."
+    )
+
 na_data %>% 
-  group_by(is_lgbtq) %>% 
+  group_by(
+    is_lgbtq = factor(is_lgbtq, levels = c("Non-LGBTQ+", "LGBTQ+"))
+    ) %>% 
   select(one_of(my_vars)) %>% 
   pivot_longer(
     cols = -is_lgbtq, 
@@ -1335,7 +1386,8 @@ na_data %>%
   mutate(
     ratings = 
       recode(ratings, !!! likert_labels) %>% 
-      factor(levels = likert_labels)
+      factor(levels = rev(likert_labels)), 
+    variable = recode(variable, !!! variable_recode) 
   ) %>% 
   count(is_lgbtq, variable, ratings) %>% 
   group_by(is_lgbtq, variable) %>% 
@@ -1346,7 +1398,7 @@ na_data %>%
   geom_hline(yintercept = 0.5, color = "black") + 
   geom_col() + 
   facet_wrap(vars(variable), ncol = 1) + 
-  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + #coord_flip()
   scale_fill_brewer(
     #have to check that this is right
     labels = rev(likert_labels), 
@@ -1370,9 +1422,365 @@ na_data %>%
   )
 ```
 
+Lets interpret the plot above panel by panel: 
+
+* In general, it looks like most LGBTQ+ students and non-LGBTQ+ students alike identify with members of their institutional affinity organizations, although slightly more LGBTQ+ students identify with the members of the group than non-LGBTQ+ students. 
+
+* Most LGBTQ+ students feel supported (in some way) by their LGBTQ+ affinity organization, but most non-LGBTQ+ students neither agree nor disagree with the statement. 
+
+* A majority of both LGBTQ+ students and non-LGBTQ+ students felt that their local affinity organizations had a clear mission, but Non-LGBTQ+ students seemed to think that groups' missions were clearer overall than their LGBTQ+ counterparts. 
+
+Note that these plots weight every student equally regardless of where they go to school or how they identify. We can aggregate students who go to the same school to give school-level summaries of the data (which is less prone to tyranny of the majority). 
+
+**School-level summaries**
+
+```{r, warning = FALSE, message = FALSE}
+variable_recode <- 
+  setNames(
+    object = , 
+      c(
+        "\"I easily identify with members of my school's LGBTQ+ student group.\"" %>% 
+          str_wrap(width = 35), 
+        "\"I feel that the LGBTQ+ medical student group at my school has a clear mission.\"" %>% 
+          str_wrap(width = 35), 
+        "\"I feel supported by the LGBTQ+ medical student group at my medical school.\"" %>% 
+          str_wrap(width = 35)
+      ), 
+    nm = c("identify", "mission", "supported")
+  )
+
+na_data %>% 
+  group_by(
+    is_lgbtq = factor(is_lgbtq, levels = c("LGBTQ+", "Non-LGBTQ+")), 
+    school_attend
+  ) %>% 
+  select(one_of(my_vars)) %>% 
+  pivot_longer(
+    cols = c(-is_lgbtq, -school_attend),
+    names_to = "variable", 
+    values_to = "ratings", 
+    names_prefix = "school_affinity_group_"
+  ) %>% 
+  drop_na() %>% 
+  mutate(variable = recode(variable, !!! variable_recode)) %>% 
+  group_by(is_lgbtq, school_attend, variable) %>% 
+  summarize(ratings = mean(ratings)) %>% 
+  ggplot(aes(x = is_lgbtq, y = ratings, fill = is_lgbtq)) + 
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, alpha = 0.4, stroke = 0, color = "black") + 
+  facet_wrap(vars(variable)) + 
+  scale_y_continuous(minor_breaks = NULL) + 
+  scale_fill_manual(values = c(mspa_hex, "gray60")) + 
+  theme(
+    legend.position = "none"
+  ) + 
+  labs(
+    x = NULL, 
+    y = "Average likert rating per school (1-5 scale)", 
+    caption = str_glue("N = {n}")
+  )
+
+```
+
+And we see that, even when calculating school-level (as opposed to individual-level) responses, we see the same trends as above. This indicates that the effects we've noticed aren't being driven solely by the schools with the largest number of respondents. 
+
+Another thing that I was interested in (related to some of the discussion above) was whether or not all demographic groups felt the same way about how they related to their local LGBTQ+ affinity organization. We can look into that a bit here: 
+
+```{r, fig.width = 8, warning = FALSE, message = FALSE}
+variable_recode <- 
+  c(
+    "identify" = 
+      "I easily identify with members of my school's LGBTQ+ student group.", 
+    "mission" = 
+      "I feel that the LGBTQ+ medical student group at my school has a clear mission.", 
+    "supported" = 
+      "I feel supported by the LGBTQ+ medical student group at my medical school."
+    )
+
+na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  mutate(
+    status = 
+      case_when(
+        is_urm == "yes" & is_gm == "yes" ~ "URM/GM", 
+        is_urm == "yes" & is_gm == "no" ~ "URM", 
+        is_urm == "no" & is_gm == "yes" ~ "GM", 
+        TRUE ~ "Non-URM/Non-GM"
+      ) %>% 
+      factor(levels = c("Non-URM/Non-GM", "URM", "GM", "URM/GM"))
+  ) %>% 
+  group_by(status) %>% 
+  select(one_of(my_vars)) %>% 
+  pivot_longer(
+    cols = -status, 
+    names_to = "variable", 
+    values_to = "ratings", 
+    names_prefix = "school_affinity_group_"
+  ) %>% 
+  drop_na() %>% 
+  mutate(
+    ratings = 
+      recode(ratings, !!! likert_labels) %>% 
+      factor(levels = rev(likert_labels)), 
+    variable = recode(variable, !!! variable_recode) 
+  ) %>% 
+  count(status, variable, ratings) %>% 
+  group_by(status, variable) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  ggplot(
+    aes(x = status, y = proportion, fill = ratings)
+  ) + 
+  geom_hline(yintercept = 0.5, color = "black") + 
+  geom_col() + 
+  facet_wrap(vars(variable), ncol = 1) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + #coord_flip()
+  scale_fill_brewer(
+    #have to check that this is right
+    labels = rev(likert_labels), 
+    type = "div",
+    palette = "RdYlGn", 
+    aesthetics = "fill", 
+    direction = -1, 
+    guide = guide_legend(reverse = TRUE)
+  ) + 
+  coord_flip() + 
+  theme(
+    legend.title = element_text(size = 9),
+    legend.position = "bottom"
+  ) +  
+  labs(
+    subtitle = "",
+    x = NULL,
+    y = "Percentage of respondents", 
+    fill = NULL,
+    caption = str_glue("N = {n}")
+  )
+```
+
+From these plots, we can see that students who identified as underrepresented in medicine (non-white) and as gender minorities (all categories except cisgender men and cisgender women) tend to identify with other members of their LGBTQ+ organization less and tend to feel that the groups do not have as clear of a mission. 
+
+## What are LGBTQ+ medical students interested in?
+
+In this section of the NA, we asked the following:
+
+>In the following questions, we ask that you rank the degree to which, in general, you are interested in each topic on a scale from 5 (very interested) to 1 (not at all interested). This information could be used to develop areas of focus for a national LGBTQ+ medical student organization.
+
+The results are as follows: 
+
+**Student-by-student:**
+
+```{r, fig.width = 11, message = FALSE, warning = FALSE}
+
+interest_recode <- 
+  c(
+    "meded" = "LGBTQ+ health education",
+    "social" = "LGBTQ+ social events", 
+    "bias_training" = "Implicit bias and LGBTQ+ anti-discrimination training", 
+    "mentorship" = "Physician mentorship for LGBTQ+ students",
+    "advocacy" = "LGBTQ+ political/social advocacy",
+    "global_health" = "LGBTQ+ Global Health",
+    "other" = "Other"
+  )
+
+n <- 
+  na_data %>% 
+  group_by(is_lgbtq) %>% 
+  select(starts_with("interest_"), -interest_lgbtq_other) %>%
+  drop_na() %>% 
+  count()
+
+n_lgbtq <- n$n[[1]]
+n_n_lgbtq <- n$n[[2]]
+
+n_total <- n_lgbtq + n_n_lgbtq
+
+variable_recode <- 
+  c(
+    "identify" = 
+      "I easily identify with members of my school's LGBTQ+ student group.", 
+    "mission" = 
+      "I feel that the LGBTQ+ medical student group at my school has a clear mission.", 
+    "supported" = 
+      "I feel supported by the LGBTQ+ medical student group at my medical school."
+    )
+
+na_data %>% 
+  group_by(is_lgbtq) %>% 
+  select(starts_with("interest_"), -interest_lgbtq_other) %>%
+  pivot_longer(
+    cols = -is_lgbtq, 
+    names_to = "variable", 
+    values_to = "ratings", 
+    names_prefix = "interest_lgbtq_"
+  ) %>% 
+  drop_na() %>% 
+  mutate(
+    ratings = 
+      recode(ratings, !!! interest_labels) %>% 
+      factor(levels = rev(interest_labels)), 
+    variable = recode(variable, !!! interest_recode)
+  ) %>% 
+  count(is_lgbtq, variable, ratings) %>% 
+  group_by(is_lgbtq, variable) %>% 
+  mutate(proportion = n / sum(n)) %>% 
+  ungroup() %>% 
+  mutate(variable = fct_reorder(variable, proportion, max)) %>% 
+  ggplot(
+    aes(x = variable, y = proportion, fill = ratings)
+  ) + 
+  geom_hline(yintercept = 0.5, color = "black") + 
+  geom_col() + 
+  facet_wrap(vars(is_lgbtq), ncol = 1) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + #coord_flip()
+  scale_fill_brewer(
+    #have to check that this is right
+    labels = rev(interest_labels), 
+    type = "div",
+    palette = "RdYlGn", 
+    aesthetics = "fill", 
+    direction = -1, 
+    guide = guide_legend(reverse = TRUE)
+  ) + 
+  coord_flip() + 
+  theme(
+    legend.title = element_text(size = 9),
+    legend.position = "bottom"
+  ) +  
+  labs(
+    subtitle = "LGBTQ+ medical students are most interested in LGBTQ+ health education",
+    x = NULL,
+    y = "Percentage of respondents", 
+    fill = NULL,
+    caption = str_glue("N = {n_total}")
+  )  
+```
 
 
-## Outness - how "out" are LGBTQ-identifying medical students?
+From this plot, we can see that LGBTQ+ medical students seem to be the most interested overall in LGBTQ+ health education, followed by social/political advocacy, then implicit bias/anti-discrimination training. Interestingly, we can also see that Non-LGBTQ+ studenta are most interested in implicit bias/LGBTQ+ anti-discrimination training (in this case, it would likely be something like "allyship training") and are not very interested in social events (cough cough). 
+
+
+We also asked students to indicate which of the above categories were "important (however you define importance) in your **professional** development as a future physician" and to give the degree of satisfaction that they felt at their medical school for each topic on a scale from 1-10. 
+
+
+Importance: 
+
+```{r}
+
+```
+
+Satisfaction: 
+
+```{r}
+
+```
+
+
+## Outness - how "out" are LGBTQ-identifying medical students in various contexts?
+
+```{r, fig.width = 8, fig.height = 7}
+context_recode <- 
+  c(
+    "classmates_peers" = "To peers", 
+    "labmates_coworkers_team" = "To labmates or team members", 
+    "mentors" = "To mentors", 
+    "medical_school_app" = "On application to medical school", 
+    "residency_app" = "On application to residency/post-doctoral studies"
+  )
+
+n <- 
+  outness_data <- 
+  na_data %>% 
+  select(
+    starts_with("out_"), 
+    starts_with("ability_out_"), 
+    starts_with("protections_out"), 
+    sex, 
+    is_urm, 
+    is_gm, 
+    school_attend, 
+    is_lgbtq
+  ) %>% 
+  select(-contains("explanation")) %>% 
+  drop_na(school_attend, is_lgbtq) %>% 
+  nrow()
+  
+  
+  
+outness_data <- 
+  na_data %>% 
+  select(
+    starts_with("out_"), 
+    starts_with("ability_out_"), 
+    starts_with("protections_out"), 
+    sex, 
+    is_urm, 
+    is_gm, 
+    school_attend, 
+    is_lgbtq
+  ) %>% 
+  select(
+    -contains("explanation"), 
+    -contains("other")
+  ) %>% 
+  drop_na(school_attend, is_lgbtq) %>% 
+  pivot_longer(
+    cols = 
+      c(
+        starts_with("out_"), 
+        starts_with("ability_out_"), 
+        starts_with("protections_out")
+      ), 
+    names_to = c("variable", "context"), 
+    values_to = "is_out", 
+    names_sep = "ut_"
+  ) %>% 
+  mutate(
+    variable = 
+      recode(
+        variable, 
+        "o" = "Out (or plan to be out)", 
+        "ability_o" = "Support ability to be out", 
+        "protections_o" = "Support protections for outness"
+      ), 
+    context = 
+      recode(
+        context, 
+        !!! context_recode
+      ) 
+  )
+
+outness_data %>% 
+  group_by(is_lgbtq, variable, context) %>% 
+  summarize(prop = sum(is_out == "yes") / n()) %>% 
+  mutate(context = fct_reorder(context, desc(prop))) %>% 
+  ggplot(aes(x = context, y = prop, fill = is_lgbtq)) + 
+  geom_col(position = "dodge", color = "black") +
+  geom_text(
+    aes(label = (prop * 100) %>% round(0)), 
+    vjust = -0.2, 
+    size = 4, 
+    position = position_dodge(width = 0.9), 
+    fontface = "bold"
+  ) + 
+  facet_wrap(vars(variable), ncol = 3) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_fill_manual(
+    breaks = c("LGBTQ+", "Non-LGBTQ+"), 
+    values = c(mspa_hex, "gray60") 
+  ) + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    ) + 
+  labs(
+    x = NULL, 
+    y = "% of Students", 
+    fill = NULL, 
+    caption = str_glue("N = {n}")
+  )
+  
+```
+
 
 
 
@@ -1390,6 +1798,4 @@ na_data %>%
   select(Intersectionality = intersectionality) %>% 
   knitr::kable()
 ```
-
-
 

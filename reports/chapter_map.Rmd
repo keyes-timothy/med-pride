@@ -2,11 +2,13 @@
 title: "Chapter Map"
 author: "tkeyes"
 date: "3/29/2020"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 ```
 
 ```{r}
@@ -17,6 +19,7 @@ library(writexl)
 library(sf)
 library(leaflet)
 library(leaflet.mapboxgl)
+library(htmlwidgets)
 
 
 # Parameters 
@@ -150,7 +153,8 @@ chapter_data %>%
 ## Create interactive map
 
 ```{r}
-leaflet(width = 1000) %>%
+final_map <- 
+  leaflet(height = 500, width = 750) %>%
   addMapboxGL(
     accessToken = access_token,
     style = style_url_chapter_map
@@ -162,6 +166,7 @@ leaflet(width = 1000) %>%
     label = 
       chapter_data$medical_school %>% 
       str_wrap(width = 20), 
+    labelOptions = labelOptions(textsize = "15px"), 
     data = chapter_data, 
     popup = 
       str_glue(
@@ -175,7 +180,11 @@ leaflet(width = 1000) %>%
             size = length(chapter_data$region), 
             replace = TRUE
           )
-      )
+      ) 
   )
+
+final_map
+
+saveWidget(final_map, file = here::here("reports", "final_map.html"))
 ```
 

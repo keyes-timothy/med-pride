@@ -1,0 +1,1179 @@
+---
+title: "Outness report"
+author: "Timothy Keyes"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    toc: true
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, dpi = 300)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(lubridate)
+library(waffle)
+library(kableExtra)
+library(ggthemes)
+library(ggalluvial)
+
+# Parameters
+input_path <- here::here("data", "mspa_na_data.rds")
+metadata_path <- here::here("data-raw", "school_metadata.csv")
+figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
+
+total_md <- 153
+total_do <- 36
+
+likert_colors <- c("darkgreen","green","orange","red","darkred")
+
+likert_labels <- 
+  c(
+    "Strongly disagree",
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
+
+interest_labels <- 
+  c(
+    "Not at all interested",
+    "Less interested", 
+    "Undecided", 
+    "Somewhat interested", 
+    "Very interested"
+  )
+
+my_theme <- 
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+    axis.title.y = element_text(size = 12, face = "bold"), 
+    axis.title.x = element_text(size = 12, face = "bold")
+  ) 
+
+mspa_hex <- "#666699"
+
+#===============================================================================
+
+# read in data
+na_data <- 
+  input_path %>% 
+  read_rds()
+
+metadata <- 
+  metadata_path %>% 
+  read_csv() %>% 
+  drop_na()
+```
+
+## Data quality and cleaning
+
+I've already done some data cleaning in previous scripts, but there are still a few tweaks that we probably want to make so that everything is human-readable and so that only useful information is carried forward. 
+
+First, we want to remove people who did not consent to the survey, since we can't use their information anyway. We will also remove students who are not in schools within the U.S. or who did not provide the name of the school that they attend. 
+
+```{r}
+na_data <- 
+  na_data %>% 
+  filter(consent == "yes", school_attend != "International") %>% 
+  drop_na(school_attend)
+```
+
+And then we can filter out some variables that we don't need.
+
+```{r}
+na_data <- 
+  na_data %>% 
+  select(-survey_id, -consent, -complete)
+```
+
+And create a few variables that we'll need later: 
+
+```{r}
+na_data <- 
+  na_data %>% 
+  mutate(
+    sex = 
+      case_when(
+        sab_is_male == "yes"   ~ "male", 
+        sab_is_female == "yes" ~ "female", 
+        TRUE                   ~ NA_character_
+      ), 
+    is_urm = if_else(race_white == "yes", "no", "yes"), 
+    is_gm = 
+      case_when(
+        gender_agender == "yes" ~ "yes", 
+        gender_genderqueer == "yes" ~ "yes", 
+        gender_transman == "yes" ~ "yes", 
+        gender_transwoman == "yes" ~ "yes", 
+        gender_another == "yes" ~ "yes", 
+        TRUE ~ "no"
+      )
+  ) %>% 
+  left_join(metadata, by = c("school_attend" = "name")) %>% 
+  mutate(degree_type = factor(Degree, levels = c("MD", "DO"))) %>% 
+  drop_na(degree_type)
+
+na_data
+```
+
+
+## Univariate Demographics report
+
+The first section of the survey asked questions about respondents' demographic identifiers, including the following: 
+
+* What school they attend (`school_attend`)
+* What year of medical school they're in (`med_school_year`)
+* Whether or not they identify as LGBTQ+ (`is_lgbtq`)
+* What their current gender identity is (variables that start with `gender_`)
+* What their current sexual orientation is (variables that start with `so_`)
+* Their race/ethnicity (variables that start with `race_`)
+* If they attend an MD or a DO program (`degree_type`)
+
+
+
+Below, we calculate the breakdown of our survey respondents by each of these demographics.
+
+### What school do you attend?
+
+Schools are arranged in order of decreasing number of responses. 
+
+```{r}
+na_data %>%
+  count(school_attend, name = "Number of responses") %>% 
+  mutate(
+    `Percentage of total responses` = 
+      ((`Number of responses` / sum(`Number of responses`)) * 100) %>% 
+      round(digits = 1)
+  ) %>% 
+  rename(School = school_attend) %>% 
+  arrange(desc(`Number of responses`)) %>% 
+  knitr::kable()
+```
+
+And just to explicitly show the overall N after filtering: 
+
+```{r}
+na_data %>% 
+  count(name = "n_overall")
+```
+
+
+### All other demographic variables
+
+```{r}
+demo_overall <- 
+  na_data %>% 
+  count(degree_type, name = "count") %>% 
+  mutate(percentage = (count / sum(count) * 100) %>% round(1)) %>% 
+  bind_rows(
+    na_data %>% 
+      count(name = "count") %>% 
+      mutate(
+        percentage = 100,
+        degree_type = "Full Sample"
+      )
+  ) %>% 
+  pivot_longer(
+    cols = c(count, percentage), 
+    names_to = "variable", 
+    values_to = "values"
+  ) %>% 
+  pivot_wider(
+    names_from = c(degree_type, variable), 
+    values_from = values
+  ) %>% 
+  mutate(variable = "Overall")
+
+demo_breakdown <- 
+  na_data %>% 
+  group_by(degree_type) %>% 
+  select(
+    starts_with("so_"), 
+    starts_with("gender_"), 
+    starts_with("race_"), 
+    -contains("description"), 
+    -contains("explanation")
+  ) %>% 
+  summarize_all(
+    .funs = function(x) sum(x == "yes")
+  ) %>% 
+  pivot_longer(
+    cols = -degree_type,
+    names_to = "variable", 
+    values_to = "count"
+  ) %>% 
+  group_by(
+    variable_type = 
+      str_extract(variable, ".+_") %>% 
+      str_sub(end = -2L)
+  ) %>% 
+  mutate(percentage = (count / sum(count) * 100) %>% round(1)) %>% 
+  bind_rows(
+    na_data %>% 
+    select(
+      starts_with("so_"), 
+      starts_with("gender_"), 
+      starts_with("race_"), 
+      -contains("description"), 
+      -contains("explanation")
+    ) %>% 
+      summarize_all(
+        .funs = function(x) sum(x == "yes")
+      ) %>% 
+      pivot_longer(
+        cols = everything(),
+        names_to = "variable", 
+        values_to = "count"
+      ) %>% 
+      group_by(
+        variable_type = 
+          str_extract(variable, ".+_") %>% 
+          str_sub(end = -2L)
+      ) %>% 
+      mutate(
+        percentage = (count / sum(count) * 100) %>% round(1), 
+        degree_type = "Full Sample"
+      )
+  )
+
+demo_year <- 
+  na_data %>% 
+  group_by(degree_type) %>% 
+  select(med_school_year) %>% 
+  count(med_school_year, name = "count") %>% 
+  drop_na() %>% 
+  ungroup() %>% 
+  mutate(percentage = (count / sum(count) * 100) %>% round(1)) %>% 
+  bind_rows(
+    na_data %>%
+      count(med_school_year, name = "count") %>% 
+      drop_na() %>% 
+      mutate(
+        percentage = (count / sum(count) * 100) %>% round(1),
+        degree_type = "Full Sample"
+      )
+  ) %>% 
+  transmute(
+    degree_type,
+    variable = med_school_year, 
+    variable_type = "med_school_year",
+    count, 
+    percentage
+  )
+
+demo_combined <- 
+  bind_rows(demo_breakdown, demo_year) %>% 
+  pivot_longer(
+    cols = c(count, percentage), 
+    names_to = "my_variable", 
+    values_to = "my_value"
+  ) %>% 
+  pivot_wider(
+    names_from = c(degree_type, my_variable), 
+    values_from = my_value
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    variable_type = 
+      factor(
+        variable_type, 
+        levels = c("gender", "so", "race", "med_school_year")
+      )
+  ) %>% 
+  arrange(variable_type, desc(MD_count)) %>% 
+  select(-variable_type)
+
+```
+
+Here we actually make the table...
+
+```{r}
+recode_values <- 
+  c(
+    "gender_woman" = "Woman", 
+    "gender_man" = "Man", 
+    "gender_genderqueer" = "Genderqueer/Gender non-conforming", 
+    "gender_transman" = "Transgender Man", 
+    "gender_agender" = "Agender", 
+    "gender_another" = "Another Gender Identity", 
+    "gender_transwoman" = "Transgender Woman",
+    "so_heterosexual" = "Straight/Heterosexual", 
+    "so_gay" = "Gay", 
+    "so_bisexual" = "Bisexual", 
+    "so_queer" = "Queer", 
+    "so_pansexual" = "Pansexual", 
+    "so_lesbian" = "Lesbian", 
+    "so_questioning" = "Questioning", 
+    "so_asexual" = "Asexual",
+    "so_another" = "Another Sexual Orientation", 
+    "race_white" = "White/Caucasian", 
+    "race_asian" = "Asian", 
+    "race_hispanic" = "Latino or Hispanic",
+    "race_black" = "Black or African American", 
+    "race_another" = "Another Race", 
+    "race_native" = "American Indian or Alaska Native", 
+    "race_pi" = "Native Hawaiian or Other Pacific Islander"
+  )
+
+demo_overall %>% 
+  bind_rows(demo_combined) %>%
+  transmute(
+    recode(variable, !!! recode_values),  
+    `Full Sample` = str_glue("{`Full Sample_count`} ({`Full Sample_percentage`}%)"), 
+    `Allopathic (MD)` = str_glue("{MD_count} ({MD_percentage}%)"), 
+    `Osteopathic (DO)` = str_glue("{DO_count} ({DO_percentage}%)"), 
+  ) %>% 
+  kable(col.names = c(" ", colnames(.)[-1])) %>% 
+  kable_styling(
+    bootstrap_options = c("striped", "condensed"),
+    full_width = F
+  ) %>%
+  row_spec(1, bold = T) %>% 
+  pack_rows("Gender", 2, 8, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Sexual Orientation", 9, 17, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Race/Ethnicity", 18, 24, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Year in School", 25, 28, label_row_css = "background-color: #666; color: #fff;") 
+```
+
+Outness plots
+
+```{r}
+context_recode <- 
+  c(
+    "classmates_peers" = "To peers", 
+    "labmates_coworkers_team" = "To lab-mates or team members", 
+    "mentors" = "To mentors", 
+    "medical_school_app" = "On application to medical school", 
+    "residency_app" = "On application to residency/post-doctoral studies"
+  )
+
+n <- 
+  na_data %>% 
+  drop_na(school_attend, is_lgbtq) %>% 
+  nrow()
+  
+outness_data <- 
+  na_data %>% 
+  select(
+    starts_with("out_"), 
+    starts_with("ability_out_"), 
+    starts_with("protections_out"), 
+    sex, 
+    is_urm, 
+    is_gm, 
+    school_attend, 
+    is_lgbtq
+  ) %>% 
+  select(
+    -contains("explanation"), 
+    -contains("other")
+  ) %>% 
+  drop_na(school_attend, is_lgbtq) %>% 
+  pivot_longer(
+    cols = 
+      c(
+        starts_with("out_"), 
+        starts_with("ability_out_"), 
+        starts_with("protections_out")
+      ), 
+    names_to = c("variable", "context"), 
+    values_to = "is_out", 
+    names_sep = "ut_"
+  ) %>% 
+  mutate(
+    variable = 
+      recode(
+        variable, 
+        "o" = "Out (or plan to be out)", 
+        "ability_o" = "Support ability to be out", 
+        "protections_o" = "Support protections for outness"
+      ), 
+    context = 
+      recode(
+        context, 
+        !!! context_recode
+      ) 
+  )
+
+outness_data %>% 
+  group_by(is_lgbtq, variable, context) %>% 
+  summarize(prop = sum(is_out == "yes") / n()) %>% 
+  mutate(context = fct_reorder(context, desc(prop))) %>% 
+  ggplot(aes(x = context, y = prop, fill = is_lgbtq)) + 
+  geom_col(position = "dodge", color = "black") +
+  geom_text(
+    aes(label = (prop * 100) %>% round(0)), 
+    vjust = -0.2, 
+    size = 4, 
+    position = position_dodge(width = 0.9), 
+    fontface = "bold"
+  ) + 
+  facet_wrap(vars(variable), ncol = 3) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_fill_manual(
+    breaks = c("LGBTQ+", "Non-LGBTQ+"), 
+    values = c(mspa_hex, "gray60") 
+  ) + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    ) + 
+  labs(
+    x = NULL, 
+    y = "% of Students", 
+    fill = NULL, 
+    caption = str_glue("N = {n}")
+  )
+```
+
+Alter `na_data` to include a variable that we will use later
+```{r}
+na_data <- 
+  na_data %>% 
+  mutate(
+    gender_expansive = 
+      if_else(
+          gender_genderqueer == "yes" | 
+          gender_agender == "yes" | 
+          gender_transman == "yes" | 
+          gender_transwoman == "yes" | 
+          gender_another == "yes",
+        "yes", 
+        "no"
+      ), 
+    gender_nonexpansive = 
+      if_else(
+        gender_expansive == "no", 
+        "yes", 
+        "no"
+      )
+  )
+```
+
+
+```{r}
+so_vars <- 
+  colnames(na_data)[
+    setdiff(
+      starts_with(match = "so_", vars = colnames(na_data)), 
+      c(
+        ends_with(match = "_description", vars = colnames(na_data)), 
+        ends_with(match = "_explanation", vars = colnames(na_data))
+      )
+    )
+  ]
+
+demographic_vars <- 
+  c("so_", "gender_", "race_") %>% 
+  map(
+    ~ setdiff(
+      starts_with(match = ., vars = colnames(na_data)), 
+      ends_with(match = "_description", vars = colnames(na_data))
+    )
+  ) %>% 
+  unlist() %>% 
+  colnames(na_data)[.]
+      
+
+tally_outness <- function(my_var) {
+  na_data %>% 
+    filter(is_lgbtq == "LGBTQ+") %>% 
+    filter(!! sym(my_var) == "yes") %>% 
+    select(starts_with("out_")) %>%
+    select(-ends_with("_explanation"), -ends_with("_other")) %>% 
+    summarize_all(
+      #list(
+        #count = function(x) sum(x == "yes"),
+        #percentage = 
+      function(x) sum(x == "yes") / length(x) * 100
+      #)
+    ) %>% 
+    pivot_longer(
+      cols = everything(), 
+      names_to = "environment", 
+      values_to = "percent_out", 
+      names_prefix = "out_"
+    )
+}
+
+outness_subgroup <- 
+  tibble(identity = demographic_vars) %>% 
+  mutate(
+    data = map(identity, .f = tally_outness)
+  ) %>% 
+  unnest() %>% 
+  separate(col = identity, into = c("var_type", "identity"), sep = "_")
+
+# calculate total number of people in each demographic subgroup
+demographics_n <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  summarize_at(
+    .vars = vars(starts_with("so_"), starts_with("gender_"), starts_with("race")), 
+    ~ sum(. == "yes")
+  ) %>% 
+  select(-contains("another")) %>% 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "identity", 
+    values_to = "n", 
+  ) %>% 
+  separate(col = identity, into = c("var_type", "identity"))
+
+demographics_n
+
+```
+
+
+
+```{r}
+so_labels <- 
+  function(label) {
+    new_label <-
+      str_glue(
+        "{title} (n = {number})", 
+        title = str_to_title(label), 
+        number = 
+          demographics_n %>% 
+          filter(identity %in% label) %>% 
+          pull(n)
+      )
+    new_label
+  }
+
+overall_outness_data <- 
+  outness_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  group_by(variable, context) %>%
+  summarize(prop = sum(is_out == "yes") / n()) %>%
+  mutate(
+    environment = fct_reorder(context, desc(prop)), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall"
+  )
+
+overall_outness_data
+  
+
+# SO plot
+so_plot_frame <- 
+  outness_subgroup %>% 
+  filter(
+    var_type == "so", 
+    !(identity %in% c("heterosexual", "questioning", "asexual", "another"))
+  ) %>% 
+  mutate(
+    environment = 
+      recode(environment, !!! context_recode) %>% 
+      fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
+    identity = fct_reorder2(identity, environment, percent_out)
+  )
+```
+
+```{r}
+so_plot <- 
+  ggplot() + 
+  geom_line(
+    data = so_plot_frame, 
+    mapping = 
+      aes(
+        x = environment, 
+        y = percent_out, 
+        color = identity, 
+        group = identity
+      ), 
+    size = 1
+  ) +
+  geom_point(
+    data = so_plot_frame, 
+    mapping = 
+      aes(
+        x = environment, 
+        y = percent_out, 
+        fill = identity 
+      ), 
+    shape = 21, 
+    size = 3
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    limits = c(15, 105), 
+    labels = scales::label_percent(accuracy = 1, scale = 1)
+  ) +   
+  scale_fill_tableau(labels = so_labels) + 
+  scale_color_tableau(labels = so_labels) + 
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
+  ) + 
+  labs(
+    subtitle = "Outness by sexual orientation", 
+    x = NULL, 
+    y = "Percentage of \"out\" students", 
+    fill = NULL, 
+    color = NULL
+  )
+
+so_plot %>% 
+  ggsave(
+    filename = "so_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+so_plot
+
+```
+  
+  
+
+Note that in this plot we only show identities that are >5% of the total number of responses. 
+
+
+
+```{r}
+so_plot_gray <- 
+  ggplot() + 
+  geom_line(
+    data = so_plot_frame, 
+    mapping = 
+      aes(
+        x = environment, 
+        y = percent_out, 
+        group = identity, 
+        linetype = identity
+      ), 
+    color = "gray30",
+    size = 1
+  ) +
+  geom_point(
+    data = so_plot_frame, 
+    mapping = 
+      aes(
+        x = environment, 
+        y = percent_out, 
+        fill = identity, 
+        shape = identity
+      ), 
+    fill = "black",
+    color = "gray60",
+    size = 4
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    limits = c(15, 105), 
+    labels = scales::label_percent(accuracy = 1, scale = 1)
+  ) + 
+  scale_shape_manual(
+    values = 21:25,
+    labels = so_labels
+  ) + 
+  scale_linetype_discrete(labels = so_labels, guide = FALSE) + 
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
+  ) + 
+  labs(
+    subtitle = "Outness by sexual orientation", 
+    x = NULL, 
+    y = "Percentage of \"out\" students", 
+    shape = NULL, 
+    linetype = NULL
+  )
+
+so_plot_gray
+
+so_plot_gray %>% 
+  ggsave(
+    filename = "so_plot_gray.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+    )
+```
+
+
+
+
+By gender identity...
+
+```{r}
+gender_plot_frame <-
+  outness_subgroup %>% 
+  filter(identity %in% c("expansive", "nonexpansive")) %>% 
+  mutate(
+    environment = 
+      recode(environment, !!! context_recode) %>% 
+      factor(levels = levels(so_plot_frame$environment)), 
+    identity = 
+      identity %>% 
+      recode(expansive = "Gender-expansive/Gender-diverse", nonexpansive = "Cisgender") %>% 
+      str_wrap(width = 17) %>% 
+      fct_reorder2(environment, percent_out)
+  ) 
+
+gender_plot <- 
+  gender_plot_frame %>% 
+  ggplot(aes(x = environment, y = percent_out, fill = identity)) +
+  geom_line(aes(color = identity, group = identity), alpha = 0.8, size = 1) + 
+  geom_point(shape = 21, size = 3, alpha = 1) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    limits = c(15, 105), 
+    labels = scales::label_percent(accuracy = 1, scale = 1), 
+  ) + 
+  scale_fill_tableau(
+    labels = 
+      function(x) {
+        str_glue(
+          "{x} (n = {num})", 
+          num = 
+            demographics_n %>% 
+            mutate(
+              identity = 
+                identity %>% 
+                recode(
+                  expansive = "Gender-expansive/Gender-diverse", 
+                  nonexpansive = "Cisgender"
+                ) %>% 
+                str_wrap(width = 17) 
+            ) %>% 
+            filter(identity %in% x) %>% 
+            pull(n)
+        )
+      }
+  ) + 
+  scale_color_tableau(
+    labels = 
+      function(x) {
+        str_glue(
+          "{x} (n = {num})", 
+          num = 
+            demographics_n %>% 
+            mutate(
+              identity = 
+                identity %>% 
+                recode(
+                  expansive = "Gender-expansive/Gender-diverse", 
+                  nonexpansive = "Cisgender"
+                ) %>% 
+                str_wrap(width = 17) 
+            ) %>% 
+            filter(identity %in% x) %>% 
+            pull(n)
+        )
+      }
+  ) + 
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
+  ) + 
+  labs(
+    subtitle = "Outness by gender identity", 
+    x = NULL, 
+    y = "Percentage of \"out\" students", 
+    fill = NULL, 
+    color = NULL
+  ) 
+
+gender_plot
+
+gender_plot %>% 
+  ggsave(
+    filename = "gender_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+  
+```
+
+
+```{r}
+gender_labels <- 
+  function(x) {
+    str_glue(
+      "{x} (n = {num})", 
+      num = 
+        demographics_n %>% 
+        mutate(
+          identity = 
+            identity %>% 
+            recode(
+              expansive = "Gender-expansive/Gender-diverse", 
+              nonexpansive = "Cisgender"
+            ) %>% 
+            str_wrap(width = 17) 
+        ) %>% 
+        filter(identity %in% x) %>% 
+        pull(n)
+    )
+  }
+
+gender_plot_gray <- 
+  gender_plot_frame %>% 
+  ggplot(aes(x = environment, y = percent_out)) +
+  geom_line(aes(color = identity, group = identity), alpha = 0.8, size = 1) + 
+  geom_point(
+    aes(fill = identity), 
+    color = "black", 
+    shape = 21, 
+    size = 3, 
+    alpha = 1
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    limits = c(15, 105), 
+    labels = scales::label_percent(accuracy = 1, scale = 1)
+  ) + 
+  scale_shape_manual(values = 21:22, labels = gender_labels) + 
+  scale_color_manual(values = c("black", "gray"), labels = gender_labels) + 
+  scale_fill_manual(values = c("black", "gray"), labels = gender_labels) + 
+  theme_bw() + 
+  theme(
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
+  ) + 
+  labs(
+    subtitle = "Outness by gender identity", 
+    x = NULL, 
+    y = "Percentage of \"out\" students", 
+    fill = NULL, 
+    color = NULL
+  ) 
+
+gender_plot_gray
+
+gender_plot_gray %>% 
+  ggsave(
+    filename = "gender_plot_gray.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+
+```
+
+
+Support for outness plots: 
+
+```{r, dpi = 300}
+context_order <- 
+  outness_data %>% 
+  filter(variable == "Out (or plan to be out)") %>% 
+  group_by(context) %>% 
+  summarize(prop = sum(is_out == "yes") / n()) %>% 
+  arrange(desc(prop)) %>% 
+  pull(context)
+  
+
+support_plot <- 
+  outness_data %>% 
+  filter(!(variable == "Out (or plan to be out)" & is_lgbtq != "LGBTQ+")) %>% 
+  group_by(variable, context) %>%
+  summarize(prop = sum(is_out == "yes") / n()) %>%
+  mutate(
+    environment = factor(context, levels = context_order), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall"
+  ) %>% 
+  ggplot(aes(x = environment, y = percent_out)) + 
+  geom_col(
+    aes(fill = variable), 
+    position = "dodge", 
+    color = "black", 
+    size = 0.6
+  ) +
+  geom_text(
+    aes(
+      group = variable, 
+      label = str_glue("{num}%", num = percent_out %>% round(0))
+    ), 
+    size = 4, 
+    position = position_dodge(width = 0.91), 
+    fontface = "bold", 
+    vjust = -0.3
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1, scale = 1), 
+    limits = c(NA, 101)
+  ) + 
+  scale_fill_tableau() + 
+  theme_bw() + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1),
+  ) + 
+  labs(
+    x = NULL, 
+    y = "% of students", 
+    fill = NULL,
+    caption = str_glue("N = {nrow(na_data)}")
+  )
+
+support_plot
+
+support_plot %>% 
+  ggsave(
+    filename = "support_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7.25, 
+    height = 5,
+    units = "in"
+  )
+```
+
+
+```{r, dpi = 300}
+support_plot_gray <- 
+  support_plot + 
+  scale_fill_tableau(palette = "Classic Gray 5")
+
+support_plot_gray
+
+support_plot_gray %>% 
+  ggsave(
+    filename = "support_plot_gray.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7.25, 
+    height = 5,
+    units = "in"
+  )
+```
+
+
+Alluvium Plot 
+
+```{r}
+alluvium_plot <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(
+    out_classmates_peers, 
+    out_medical_school_app, 
+    out_residency_app, 
+    out_mentors, 
+    out_labmates_coworkers_team
+  ) %>% 
+  ggplot(
+    aes(
+      y = n, 
+      axis1 = out_medical_school_app, 
+      axis2 = out_classmates_peers,
+      axis3 = out_labmates_coworkers_team,
+      axis4 = out_mentors,
+      axis5 = out_residency_app
+    )
+  ) + 
+  geom_alluvium(aes(fill = out_medical_school_app), alpha = 0.65) + 
+  geom_stratum(width = 1/3, fill = "white", color = "black") + 
+  geom_text(stat = "stratum", infer.label = TRUE, size = 3) + 
+  scale_x_discrete(
+    limits = 
+      c(
+        "out_medical_school_app",
+        "out_classmates_peers",
+        "out_labmates_coworkers_team", 
+        "out_mentors", 
+        "out_residency_app"
+      ), 
+    labels = 
+      c(
+        "Out on medical school application?", 
+        "Out to peers?", 
+        "Out to lab-mates/team-members?",
+        "Out to mentors?", 
+        "Out on residency application?"
+      ) %>% 
+      str_wrap(width = 20),
+    expand = c(0.1, 0.1)
+  ) + 
+  scale_y_continuous(
+    labels = scales::label_number()
+  ) + 
+  scale_fill_tableau() + 
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(
+    subtitle = "Over time, medical students who were \"out\" on their applications to\nmedical school become less professionally \"out\"", 
+    x = NULL, 
+    y = "Number of students", 
+    fill = NULL,
+    caption = str_glue("N = {(na_data$is_lgbtq == \"LGBTQ+\") %>% sum(na.rm = TRUE)}")
+  )
+
+alluvium_plot
+
+alluvium_plot %>% 
+  ggsave(
+    filename = "outness_alluvium.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = file.path(figure_out_path), 
+    width = 6, 
+    height = 4.5, 
+    units = "in"
+  )
+
+```
+
+## Significance testing
+
+
+### Outness at different stages of training
+
+```{r}
+contingency_table <- 
+  table(
+    outness_data %>% 
+      filter(is_lgbtq == "LGBTQ+", variable == "Out (or plan to be out)") %>% 
+      pull(context), 
+    outness_data %>% 
+      filter(is_lgbtq == "LGBTQ+", variable == "Out (or plan to be out)") %>% 
+      pull(is_out)
+  )
+
+# chi-squared test for independence
+contingency_table %>% 
+  chisq.test()
+
+p_values <- 
+  matrix(nrow = nrow(contingency_table), ncol = nrow(contingency_table))
+
+chi_squared_values <- 
+    matrix(nrow = nrow(contingency_table), ncol = nrow(contingency_table))
+  
+
+row.names(p_values) <- row.names(contingency_table)
+colnames(p_values) <- row.names(contingency_table)
+
+row.names(chi_squared_values) <- row.names(contingency_table)
+colnames(chi_squared_values) <- row.names(contingency_table)
+
+
+for (i in 1:5) {
+  for (j in 1:5) {
+    contingency_table[c(i,j),] %>%
+      chisq.test() %>%
+      `$`(p.value) ->
+      p_values[i,j]
+    
+    contingency_table[c(i,j),] %>%
+      chisq.test() %>%
+      `$`(statistic) ->
+      chi_squared_values[i,j]
+  }
+}
+
+#bonferroni correction
+p_values <- p_values * 10
+
+p_values %>% 
+  knitr::kable() %>% 
+  kable_styling()
+
+chi_squared_values %>% 
+  knitr::kable() %>% 
+  kable_styling()
+```
+
+
+### Outness vs. support for outness in different stages of medical training
+
+```{r}
+#to peers 
+table(
+  outness_data %>% 
+    filter(context == "To peers") %>% 
+    pull(variable), 
+  outness_data %>% 
+    filter(context == "To peers") %>% 
+    pull(is_out)
+) %>% 
+  chisq.test()
+
+```
+
+```{r}
+#to labmates 
+table(
+  outness_data %>% 
+    filter(context == "To lab-mates or team members") %>% 
+    pull(variable), 
+  outness_data %>% 
+    filter(context == "To lab-mates or team members") %>% 
+    pull(is_out)
+) %>% 
+  chisq.test()
+
+```
+
+```{r}
+# MD application 
+table(
+  outness_data %>% 
+    filter(context == "On application to medical school") %>% 
+    pull(variable), 
+  outness_data %>% 
+    filter(context == "On application to medical school") %>% 
+    pull(is_out)
+) %>% 
+  chisq.test()
+
+```
+
+```{r}
+#to mentors 
+table(
+  outness_data %>% 
+    filter(context == "To mentors") %>% 
+    pull(variable), 
+  outness_data %>% 
+    filter(context == "To mentors") %>% 
+    pull(is_out)
+) %>% 
+  chisq.test()
+
+```
+
+```{r}
+#to GME 
+table(
+  outness_data %>% 
+    filter(context == "On application to residency/post-doctoral studies") %>% 
+    pull(variable), 
+  outness_data %>% 
+    filter(context == "On application to residency/post-doctoral studies") %>% 
+    pull(is_out)
+) %>% 
+  chisq.test()
+
+```
+
+

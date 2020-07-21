@@ -1,5 +1,5 @@
 ---
-title: "Needs Assessment Report (Part 1)" 
+title: "Needs Assessment Report" 
 author: "Timothy Keyes" 
 date: "`r Sys.Date()`"
 output: 
@@ -302,6 +302,7 @@ na_data %>%
 Or visualized slightly differently...
 
 ```{r}
+
 na_data %>% 
   drop_na(is_lgbtq) %>% 
   count(is_lgbtq) %>% 
@@ -691,7 +692,6 @@ likert_plot <- function(my_var = NULL, title = NULL, n = NULL) {
     )
 }
 ```
-
 
 
 ### Intercollegiate engagement of LGBTQ+ affinity organizations
@@ -1502,12 +1502,12 @@ na_data %>%
   mutate(
     status = 
       case_when(
-        is_urm == "yes" & is_gm == "yes" ~ "URM/GM", 
-        is_urm == "yes" & is_gm == "no" ~ "URM", 
+        is_urm == "yes" & is_gm == "yes" ~ "POC/GM", 
+        is_urm == "yes" & is_gm == "no" ~ "POC", 
         is_urm == "no" & is_gm == "yes" ~ "GM", 
-        TRUE ~ "Non-URM/Non-GM"
+        TRUE ~ "Non-POC/Non-GM"
       ) %>% 
-      factor(levels = c("Non-URM/Non-GM", "URM", "GM", "URM/GM"))
+      factor(levels = c("Non-POC/Non-GM", "URM", "GM", "POC/GM"))
   ) %>% 
   group_by(status) %>% 
   select(one_of(my_vars)) %>% 
@@ -1688,7 +1688,6 @@ context_recode <-
   )
 
 n <- 
-  outness_data <- 
   na_data %>% 
   select(
     starts_with("out_"), 

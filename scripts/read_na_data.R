@@ -212,6 +212,7 @@ checked_vars <-
 school_names <- 
   names_path %>% 
   read_csv() %>% 
+  drop_na() %>% 
   deframe()
   
 
@@ -251,7 +252,8 @@ na_data <-
     school_attend = 
       recode(
         school_attend, 
-        !!! school_names
+        !!! school_names, 
+        .default = NA_character_
       )
   )
 

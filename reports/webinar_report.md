@@ -78,7 +78,7 @@ bit.
     ## mean of the differences 
     ##                   -0.55
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Feeling supported by your advisors**
 
     ## `summarise()` ungrouping output (override with `.groups` argument)
 
@@ -112,7 +112,7 @@ bit.
     ## mean of the differences 
     ##                    -0.2
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Importance of finding an LGBTQ+ friendly community**
 
     ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
     ## simulated p-value with zero marginals
@@ -152,7 +152,7 @@ bit.
     ## mean of the differences 
     ##              0.05263158
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Value having access to LGBTQ+ mentors/advisors **
 
     ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
     ## simulated p-value with zero marginals
@@ -192,7 +192,7 @@ bit.
     ## mean of the differences 
     ##                    0.25
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Concern about applying to medical school as an out LGBTQ+ person**
 
     ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
     ## simulated p-value with zero marginals
@@ -232,7 +232,7 @@ bit.
     ## mean of the differences 
     ##               0.7222222
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Preparedness applying to medical school as an LGBTQ+ person**
 
     ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
     ## simulated p-value with zero marginals
@@ -272,7 +272,8 @@ bit.
     ## mean of the differences 
     ##                 -0.9375
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Do you see being LGBTQ+ as an asset or a hindrance in your application
+process?**
 
     ## `summarise()` ungrouping output (override with `.groups` argument)
 

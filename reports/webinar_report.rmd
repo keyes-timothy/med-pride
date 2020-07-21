@@ -338,38 +338,36 @@ analyze_pre_post(name = "confident_out")
 ```
 
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Feeling supported by your advisors**
 ```{r}
 analyze_pre_post(name = "support_advisors")
 ```
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Importance of finding an LGBTQ+ friendly community**
 ```{r}
 analyze_pre_post(name = "important_community")
 ```
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Value having access to LGBTQ+ mentors/advisors **
 ```{r}
 analyze_pre_post(name = "value_mentors_advisors")
 ```
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Concern about applying to medical school as an out LGBTQ+ person**
 ```{r}
 analyze_pre_post(name = "concern_applying")
 ```
 
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Preparedness applying to medical school as an LGBTQ+ person**
 ```{r}
 analyze_pre_post(name = "prepared_applying")
 ```
 
-**Confidence applying to medical school as an out LGBTQ+ person**
+**Do you see being LGBTQ+ as an asset or a hindrance in your application process?**
 ```{r}
 analyze_pre_post(name = "asset_hindrance")
 ```
-
-
 
 
 ## Final comments

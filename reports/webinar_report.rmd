@@ -185,7 +185,7 @@ analyze_pre_post <- function(name = "") {
      filter(timepoint == "pre") %>% 
      pull(response) %>% 
      as.numeric(), 
-   y = 
+   y =
      my_data %>% 
      filter(timepoint == "post") %>% 
      pull(response) %>% 

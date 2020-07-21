@@ -1,6 +1,6 @@
 Pre-med webinar analyses
 ================
-2020-07-20
+2020-07-21
 
   - [Read in and clean data](#read-in-and-clean-data)
   - [Visualizations](#visualizations)
@@ -8,14 +8,298 @@ Pre-med webinar analyses
       - [Pre and post comparisons](#pre-and-post-comparisons)
   - [Final comments](#final-comments)
 
+``` r
+# Libraries
+library(tidyverse)
+library(ggthemes)
+library(readxl)
+library(waffle)
+
+# source utilities
+
+source(here::here("scripts", "utils_mspa.R"))
+
+# Parameters
+input_path <- 
+  here::here("data-raw", "webinar.xlsx")
+
+agreement_levels <- 
+  c(
+    "Strongly disagree", 
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
+
+concern_levels <- 
+  c(
+    "Extremely concerned", 
+    "Somewhat concerned", 
+    "Moderately concerned", 
+    "Slightly concerned", 
+    "Not at all concerned"
+  ) %>% 
+  rev()
+
+prepared_levels <- 
+  c(
+    "Extremely prepared",
+    "Moderately prepared", 
+    "Somewhat prepared", 
+    "Slightly prepared", 
+    "Not at all prepared"
+  ) %>% 
+  rev()
+
+asset_levels <- 
+  c(
+    "Hindrance", 
+    "Slight hindrance", 
+    "Neither hindrance/asset", 
+    "Slight asset", 
+    "Asset"
+  )
+
+agreement_variables <- 
+  c(
+    "pre_confident_out", 
+    "pre_support_advisors", 
+    "pre_important_community", 
+    "pre_value_mentors_advisors", 
+    "post_confident_out", 
+    "post_support_advisors", 
+    "post_important_community", 
+    "post_value_mentors_advisors", 
+    "webinar_helped"
+  )
+
+col_names <-
+  c(
+    "pre_confident_out", 
+    "pre_support_advisors", 
+    "pre_important_community", 
+    "pre_value_mentors_advisors", 
+    "pre_concern_applying", 
+    "pre_prepared_applying", 
+    "pre_asset_hindrance", 
+    "pre_asset_hindrance_comment", 
+    "what_are_your_concerns",
+    "experiences_premed_advising",
+    "post_confident_out", 
+    "post_support_advisors", 
+    "post_important_community", 
+    "post_value_mentors_advisors", 
+    "webinar_helped", 
+    "post_concern_applying", 
+    "post_prepared_applying", 
+    "post_asset_hindrance", 
+    "asset_hindrance_changed", 
+    "new_concerns", 
+    "final_comments"
+  )
+```
+
 ## Read in and clean data
+
+``` r
+webinar_data <- 
+  input_path %>% 
+  read_excel(col_names = col_names, skip = 2) %>% 
+  mutate(
+    respondent_id = 1:n(), 
+    across(contains("asset"), ordered, levels = asset_levels), 
+    across(any_of(agreement_variables), ordered, levels = agreement_levels), 
+    across(contains("prepared"), ordered, levels = prepared_levels), 
+    across(contains("concern"), ordered, levels = concern_levels)
+  )
+  
+col_descriptors <- 
+  input_path %>% 
+  read_excel() %>% 
+  .[1,] %>% 
+  as.character() %>% 
+  setNames(object = ., nm = col_names)
+```
+
+``` r
+colnames(webinar_data)
+```
 
 A function for plotting and significance testing for pre- and
 post-webinar questions
 
+``` r
+analyze_pre_post <- function(name = "") { 
+  
+  subtitle <- 
+    col_descriptors[str_c("pre_",name)] %>% 
+    str_remove(pattern = "^.+-") %>% 
+    str_wrap(width = 70)
+  
+  my_data <- 
+    webinar_data %>% 
+    select(contains(name), respondent_id, -contains("comment"), -contains("changed")) %>% 
+    pivot_longer(
+      cols = contains(name), 
+      names_to = c("timepoint"), 
+      values_to = "response"
+    ) %>% 
+    drop_na() %>%
+    group_by(respondent_id) %>% 
+    filter(n() > 1) %>% 
+    ungroup() %>% 
+    mutate(
+      timepoint = 
+        str_extract(timepoint, pattern = "^[:alpha:]+") %>% 
+        factor(levels = c("pre", "post"))
+    )
+  
+  contingency_table <-
+    table(
+      my_data %>% 
+        pull(timepoint), 
+      my_data %>% 
+        pull(response)
+    ) %>% 
+    t()
+  
+  overall_chi_squared <- 
+    contingency_table %>% 
+    chisq.test(simulate.p.value = TRUE, B = 2000)
+  
+  t_statistic <- t.test(
+    x = 
+      my_data %>% 
+      filter(timepoint == "pre") %>% 
+      pull(response) %>% 
+      as.numeric(), 
+    y =
+      my_data %>% 
+      filter(timepoint == "post") %>% 
+      pull(response) %>% 
+      as.numeric(),
+    paired = TRUE
+  )
+  
+  mean_data <- 
+    my_data %>% 
+    group_by(timepoint) %>% 
+    summarize(response = mean(as.numeric(response)))
+  
+  my_likert <- 
+    my_data %>% 
+    likert_plot(
+      my_var = response, 
+      break_var = timepoint, 
+      title = NULL, 
+      n = n_distinct(my_data$respondent_id)
+    ) + 
+    labs(
+      caption = 
+        str_glue(
+          "N = {my_n}; p = {my_p}", 
+          my_n = n_distinct(my_data$respondent_id), 
+          my_p = t_statistic$p.value %>% round(4)
+        )
+    )
+  
+  my_plot <-
+    my_data %>% 
+    ggplot(aes(x = timepoint, y = response)) + 
+    geom_line(aes(group = respondent_id), color = "gray", alpha = 0.6) + 
+    geom_count(color = "gray", alpha = 0.6) +  
+    geom_line(
+      aes(x = timepoint, y = response, group = 1), 
+      data = mean_data, 
+      color = "black", 
+      size = 1.5
+    ) + 
+    geom_point(
+      aes(x = timepoint, y = response), 
+      data = mean_data, 
+      color = "black", 
+      size = 4
+    ) + 
+    scale_x_discrete(drop = FALSE) + 
+    scale_size_area(breaks = 1:5) + 
+    labs(
+      subtitle = subtitle, 
+      x = NULL, 
+      y = NULL, 
+      size = "Number of students",
+      caption = 
+        str_glue(
+          "N = {my_n}; p = {my_p}", 
+          my_n = n_distinct(my_data$respondent_id), 
+          my_p = t_statistic$p.value %>% round(4)
+        )
+    )
+  
+  my_result <- 
+    list(
+      means = mean_data, 
+      plot = my_plot, 
+      likert = my_likert, 
+      t = t_statistic
+    )
+  
+  return(my_result)
+}
+```
+
 ## Visualizations
 
 ### Did the webinar help?
+
+``` r
+n <- 
+  webinar_data %>% 
+  filter(!is.na(webinar_helped)) %>% 
+  count() %>%
+  pull(n)
+
+ns <- 
+  webinar_data %>% 
+  filter(!is.na(webinar_helped)) %>% 
+  count(webinar_helped) %>% 
+  pull(n)
+
+n_somewhat <- ns[[1]]
+n_strongly <- ns[[2]]
+
+webinar_data %>% 
+  drop_na(webinar_helped) %>% 
+  count(webinar_helped) %>% 
+  ggplot(aes(fill = webinar_helped, values = n)) + 
+  geom_waffle(color = "white", n_rows = 3, size = 0.25, make_proportional = FALSE) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 3, 
+    expand = c(0, 0)
+  ) +
+  ggthemes::scale_fill_tableau(
+    name = NULL, 
+    labels = 
+      c(
+        str_glue("Somewhat agree ({n_somewhat})"), 
+        str_glue("Strongly agree ({n_strongly})")
+      ),
+    palette = "Tableau 10"
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line(), 
+    legend.position = "bottom"
+  ) + 
+  labs(
+    subtitle = "\"This webinar helped me decide how to best to apply as an LGBTQ+ student\"",
+    x = "Number of students"
+  )
+```
 
 ![](webinar_report_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
@@ -46,7 +330,9 @@ bit.
 
 **Confidence applying to medical school as an out LGBTQ+ person**
 
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "confident_out")
+```
 
     ## $means
     ## # A tibble: 2 x 2
@@ -80,7 +366,9 @@ bit.
 
 **Feeling supported by your advisors**
 
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "support_advisors")
+```
 
     ## $means
     ## # A tibble: 2 x 2
@@ -114,13 +402,9 @@ bit.
 
 **Importance of finding an LGBTQ+ friendly community**
 
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
-    ## simulated p-value with zero marginals
-
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): Chi-squared
-    ## approximation may be incorrect
-
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "important_community")
+```
 
     ## $means
     ## # A tibble: 2 x 2
@@ -154,13 +438,9 @@ bit.
 
 **Value having access to LGBTQ+ mentors/advisors **
 
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
-    ## simulated p-value with zero marginals
-
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): Chi-squared
-    ## approximation may be incorrect
-
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "value_mentors_advisors")
+```
 
     ## $means
     ## # A tibble: 2 x 2
@@ -194,20 +474,16 @@ bit.
 
 **Concern about applying to medical school as an out LGBTQ+ person**
 
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
-    ## simulated p-value with zero marginals
-
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): Chi-squared
-    ## approximation may be incorrect
-
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "concern_applying")
+```
 
     ## $means
     ## # A tibble: 2 x 2
     ##   timepoint response
     ##   <fct>        <dbl>
-    ## 1 pre           3.17
-    ## 2 post          2.44
+    ## 1 pre           3.35
+    ## 2 post          2.65
     ## 
     ## $plot
 
@@ -224,30 +500,26 @@ bit.
     ##  Paired t-test
     ## 
     ## data:  my_data %>% filter(timepoint == "pre") %>% pull(response) %>%  and my_data %>% filter(timepoint == "post") %>% pull(response) %>%     as.numeric() and     as.numeric()
-    ## t = 2.6, df = 17, p-value = 0.01868
+    ## t = 2.7738, df = 19, p-value = 0.01209
     ## alternative hypothesis: true difference in means is not equal to 0
     ## 95 percent confidence interval:
-    ##  0.1361623 1.3082821
+    ##  0.1718101 1.2281899
     ## sample estimates:
     ## mean of the differences 
-    ##               0.7222222
+    ##                     0.7
 
 **Preparedness applying to medical school as an LGBTQ+ person**
 
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): cannot compute
-    ## simulated p-value with zero marginals
-
-    ## Warning in chisq.test(., simulate.p.value = TRUE, B = 2000): Chi-squared
-    ## approximation may be incorrect
-
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "prepared_applying")
+```
 
     ## $means
     ## # A tibble: 2 x 2
     ##   timepoint response
     ##   <fct>        <dbl>
-    ## 1 pre           2.5 
-    ## 2 post          3.44
+    ## 1 pre           2.7 
+    ## 2 post          3.75
     ## 
     ## $plot
 
@@ -264,18 +536,20 @@ bit.
     ##  Paired t-test
     ## 
     ## data:  my_data %>% filter(timepoint == "pre") %>% pull(response) %>%  and my_data %>% filter(timepoint == "post") %>% pull(response) %>%     as.numeric() and     as.numeric()
-    ## t = -3.0325, df = 15, p-value = 0.008397
+    ## t = -3.9428, df = 19, p-value = 0.0008732
     ## alternative hypothesis: true difference in means is not equal to 0
     ## 95 percent confidence interval:
-    ##  -1.5964348 -0.2785652
+    ##  -1.6073934 -0.4926066
     ## sample estimates:
     ## mean of the differences 
-    ##                 -0.9375
+    ##                   -1.05
 
 **Do you see being LGBTQ+ as an asset or a hindrance in your application
 process?**
 
-    ## `summarise()` ungrouping output (override with `.groups` argument)
+``` r
+analyze_pre_post(name = "asset_hindrance")
+```
 
     ## $means
     ## # A tibble: 2 x 2
@@ -308,6 +582,13 @@ process?**
     ##                   -0.65
 
 ## Final comments
+
+``` r
+webinar_data %>% 
+  select(`Any final comments?` = final_comments) %>% 
+  drop_na() %>% 
+  knitr::kable()
+```
 
 | Any final comments?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -8,7 +8,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, dpi = 300)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300)
 ```
 
 ```{r message=FALSE, warning=FALSE}
@@ -26,11 +26,6 @@ source(here::here("scripts", "utils_mspa.R"))
 input_path <- 
   here::here("data-raw", "webinar.xlsx")
 
-likert_colors <- c("darkgreen","green","orange","red","darkred")
-
-mspa_hex <- "#666699"
-
-
 agreement_levels <- 
   c(
     "Strongly disagree", 
@@ -42,7 +37,7 @@ agreement_levels <-
 
 concern_levels <- 
   c(
-    "Strongly concerned", 
+    "Extremely concerned", 
     "Somewhat concerned", 
     "Moderately concerned", 
     "Slightly concerned", 
@@ -52,7 +47,7 @@ concern_levels <-
 
 prepared_levels <- 
   c(
-    "Strongly prepared",
+    "Extremely prepared",
     "Moderately prepared", 
     "Somewhat prepared", 
     "Slightly prepared", 
@@ -106,9 +101,6 @@ col_names <-
     "new_concerns", 
     "final_comments"
   )
-  
-#===============================================================================
-
 ```
 
 ## Read in and clean data
@@ -131,7 +123,6 @@ col_descriptors <-
   .[1,] %>% 
   as.character() %>% 
   setNames(object = ., nm = col_names)
-
 ```
 
 ```{r, eval = FALSE}
@@ -148,8 +139,8 @@ analyze_pre_post <- function(name = "") {
     str_remove(pattern = "^.+-") %>% 
     str_wrap(width = 70)
   
- my_data <- 
-   webinar_data %>% 
+  my_data <- 
+    webinar_data %>% 
     select(contains(name), respondent_id, -contains("comment"), -contains("changed")) %>% 
     pivot_longer(
       cols = contains(name), 
@@ -157,64 +148,63 @@ analyze_pre_post <- function(name = "") {
       values_to = "response"
     ) %>% 
     drop_na() %>%
-   group_by(respondent_id) %>% 
-   filter(n() > 1) %>% 
-   ungroup() %>% 
+    group_by(respondent_id) %>% 
+    filter(n() > 1) %>% 
+    ungroup() %>% 
     mutate(
       timepoint = 
         str_extract(timepoint, pattern = "^[:alpha:]+") %>% 
         factor(levels = c("pre", "post"))
     )
- 
- contingency_table <-
-   table(
-     my_data %>% 
-       pull(timepoint), 
-     my_data %>% 
-       pull(response)
-   ) %>% 
-   t()
- 
- overall_chi_squared <- 
-   contingency_table %>% 
-   chisq.test(simulate.p.value = TRUE, B = 2000)
- 
- t_statistic <- t.test(
-   x = 
-     my_data %>% 
-     filter(timepoint == "pre") %>% 
-     pull(response) %>% 
-     as.numeric(), 
-   y =
-     my_data %>% 
-     filter(timepoint == "post") %>% 
-     pull(response) %>% 
-     as.numeric(),
-   paired = TRUE
- )
- 
- mean_data <- 
-   my_data %>% 
-   group_by(timepoint) %>% 
-   summarize(response = mean(as.numeric(response)))
-    
- 
- my_likert <- 
-   my_data %>% 
-   likert_plot(
-     my_var = response, 
-     break_var = timepoint, 
-     title = NULL, 
-     n = n_distinct(my_data$respondent_id)
-   ) + 
-   labs(
-     caption = 
-       str_glue(
-         "N = {my_n}; p = {my_p}", 
-         my_n = n_distinct(my_data$respondent_id), 
-         my_p = t_statistic$p.value %>% round(4)
-       )
-   )
+  
+  contingency_table <-
+    table(
+      my_data %>% 
+        pull(timepoint), 
+      my_data %>% 
+        pull(response)
+    ) %>% 
+    t()
+  
+  overall_chi_squared <- 
+    contingency_table %>% 
+    chisq.test(simulate.p.value = TRUE, B = 2000)
+  
+  t_statistic <- t.test(
+    x = 
+      my_data %>% 
+      filter(timepoint == "pre") %>% 
+      pull(response) %>% 
+      as.numeric(), 
+    y =
+      my_data %>% 
+      filter(timepoint == "post") %>% 
+      pull(response) %>% 
+      as.numeric(),
+    paired = TRUE
+  )
+  
+  mean_data <- 
+    my_data %>% 
+    group_by(timepoint) %>% 
+    summarize(response = mean(as.numeric(response)))
+  
+  my_likert <- 
+    my_data %>% 
+    likert_plot(
+      my_var = response, 
+      break_var = timepoint, 
+      title = NULL, 
+      n = n_distinct(my_data$respondent_id)
+    ) + 
+    labs(
+      caption = 
+        str_glue(
+          "N = {my_n}; p = {my_p}", 
+          my_n = n_distinct(my_data$respondent_id), 
+          my_p = t_statistic$p.value %>% round(4)
+        )
+    )
   
   my_plot <-
     my_data %>% 
@@ -271,14 +261,14 @@ n <-
   count() %>%
   pull(n)
 
- ns <- 
+ns <- 
   webinar_data %>% 
   filter(!is.na(webinar_helped)) %>% 
   count(webinar_helped) %>% 
-   pull(n)
- 
- n_somewhat <- ns[[1]]
- n_strongly <- ns[[2]]
+  pull(n)
+
+n_somewhat <- ns[[1]]
+n_strongly <- ns[[2]]
 
 webinar_data %>% 
   drop_na(webinar_helped) %>% 

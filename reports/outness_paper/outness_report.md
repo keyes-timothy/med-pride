@@ -1,7 +1,7 @@
 Outness report
 ================
 Timothy Keyes
-2020-12-03
+2020-12-04
 
   - [Data quality and cleaning](#data-quality-and-cleaning)
   - [Univariate Demographics report](#univariate-demographics-report)
@@ -28,7 +28,11 @@ Timothy Keyes
   - [Putting our plots together using
     {patchwork}](#putting-our-plots-together-using-patchwork)
       - [Figure 1](#figure-1)
+      - [Supplementary figure 1](#supplementary-figure-1)
       - [Figure 2](#figure-2)
+      - [Table 1](#table-1)
+  - [Some qualitative thoughts on
+    “outness”](#some-qualitative-thoughts-on-outness)
 
 First, I’ll load the libraries I want and set up a few parameters that
 will make data cleaning easier in later steps.
@@ -102,7 +106,7 @@ context_recode <-
     "classmates_peers" = "To peers", 
     "labmates_coworkers_team" = "To lab-mates or team members", 
     "mentors" = "To mentors", 
-    "medical_school_app" = "On application to medical school", 
+    "medical_school_app" = "On medical school application", 
     "residency_app" = "On application to residency/post-doctoral studies"
   )
 
@@ -205,7 +209,9 @@ na_data <-
   left_join(metadata, by = c("school_attend" = "name")) %>% 
   # some minor adjustments to variables that we'll use a lot 
   mutate(
-    degree_type = factor(degree, levels = c("MD", "DO")), 
+    degree_type = 
+      factor(degree, levels = c("MD", "DO")) %>% 
+      fct_recode("allopathic" = "MD", "osteopathic" = "DO"), 
     med_school_year = str_remove(med_school_year, pattern = "\\(.+\\)")
   ) %>% 
   select(-degree) %>% 
@@ -335,7 +341,7 @@ na_data %>%
     ## $ state                                         <chr> "California", "Californ…
     ## $ state_abbr                                    <chr> "CA", "CA", "CA", "MD",…
     ## $ city                                          <chr> "Palo Alto & San Franci…
-    ## $ degree_type                                   <fct> MD, MD, MD, MD, MD, MD,…
+    ## $ degree_type                                   <fct> allopathic, allopathic,…
 
 In our analyses here, we’ll actually ignore most of these variables and
 focus on just a couple. Specifically, we’re interested in analyzing
@@ -366,7 +372,7 @@ demographic identifiers, including the following:
   - If they attend an MD or a DO program (`degree_type`)
 
 Note that working with the columns starting with `gender_`, `so_`, and
-`race_` is a little tricky because none of the categories is
+`race_` is a little tricky because none of the categories are
 mutually-exclusive (someone can identify as both “gay” and “lesbian”,
 for instance). So, even though we can describe variables encoding
 gender, sexual orientation, and race as categorical, we have to be
@@ -3329,7 +3335,11 @@ demo_year <-
 ```
 
 Finally, we can combine the 2 tibbles above and make our table using
-`kable()` with some styling options.
+`kable()` with some styling options. Note that in the following table,
+all percentages are reported as the percentage of the **total** sample
+(all respondents). Categories in the same heading should not add up to
+100% due to the overlapping nature of a lot of the terminology we’re
+using here.
 
 ``` r
 demo_combined <- 
@@ -3351,16 +3361,17 @@ demo_combined <-
         levels = c("gender", "so", "race", "med_school_year")
       )
   ) %>% 
-  arrange(variable_type, desc(MD_count)) %>% 
+  arrange(variable_type, desc(allopathic_count)) %>% 
   select(-variable_type)
 
-demo_overall %>% 
+demo_table <- 
+  demo_overall %>% 
   bind_rows(demo_combined) %>%
   transmute(
     recode(variable, !!! recode_values),  
     `Full Sample` = str_glue("{`Full Sample_count`} ({`Full Sample_percentage`}%)"), 
-    `Allopathic (MD)` = str_glue("{MD_count} ({MD_percentage}%)"), 
-    `Osteopathic (DO)` = str_glue("{DO_count} ({DO_percentage}%)"), 
+    `Allopathic (MD)` = str_glue("{allopathic_count} ({allopathic_percentage}%)"), 
+    `Osteopathic (DO)` = str_glue("{osteopathic_count} ({osteopathic_percentage}%)"), 
   ) %>% 
   kable(col.names = c(" ", colnames(.)[-1])) %>% 
   kable_styling(
@@ -3371,7 +3382,9 @@ demo_overall %>%
   pack_rows("Gender", 2, 9, label_row_css = "background-color: #666; color: #fff;") %>%
   pack_rows("Sexual Orientation", 10, 18, label_row_css = "background-color: #666; color: #fff;") %>% 
   pack_rows("Race/Ethnicity", 19, 25, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;") 
+  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;")
+
+demo_table
 ```
 
 <table class="table table-striped table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
@@ -4566,8 +4579,8 @@ overall_outness_plot <-
   ) + 
   geom_text(
     aes(label = str_c(percent_out, "%")), 
-    nudge_y = 7.5, 
-    nudge_x = 0.08
+    nudge_y = 8.5, 
+    nudge_x = 0.13
   ) + 
   geom_text(
     aes(label = significant), 
@@ -5188,7 +5201,7 @@ label_frame
     ##   <fct>                     <fct>           <int> <int>       <dbl> <chr>       
     ## 1 To peers                  cisgender…        254   284        89.4 ""          
     ## 2 To lab-mates or team mem… cisgender…        146   284        51.4 "*"         
-    ## 3 On application to medica… cisgender…        122   284        43.0 "*"         
+    ## 3 On medical school applic… cisgender…        122   284        43.0 "*"         
     ## 4 To mentors                cisgender…        105   284        37.0 "*"         
     ## 5 On application to reside… cisgender…         65   284        22.9 "*"
 
@@ -5343,17 +5356,17 @@ year_outness
     ##  1 "Clinical Stude… To peers            184   201        91.5 "Clinic…        17
     ##  2 "Clinical Stude… To lab-mate…        111   201        55.2 "Clinic…        90
     ##  3 "Clinical Stude… To mentors          106   201        52.7 "Clinic…        95
-    ##  4 "Clinical Stude… On applicat…         95   201        47.3 "Clinic…       106
+    ##  4 "Clinical Stude… On medical …         95   201        47.3 "Clinic…       106
     ##  5 "Clinical Stude… On applicat…         85   201        42.3 "Clinic…       116
     ##  6 "Pre-Clinical S… To peers            346   383        90.3 "Pre-Cl…        37
     ##  7 "Pre-Clinical S… To lab-mate…        224   383        58.5 "Pre-Cl…       159
     ##  8 "Pre-Clinical S… To mentors          160   383        41.8 "Pre-Cl…       223
-    ##  9 "Pre-Clinical S… On applicat…        232   383        60.6 "Pre-Cl…       151
+    ##  9 "Pre-Clinical S… On medical …        232   383        60.6 "Pre-Cl…       151
     ## 10 "Pre-Clinical S… On applicat…         81   383        21.1 "Pre-Cl…       302
     ## 11 "Research "      To peers             27    30        90   "Resear…         3
     ## 12 "Research "      To lab-mate…         25    30        83.3 "Resear…         5
     ## 13 "Research "      To mentors           22    30        73.3 "Resear…         8
-    ## 14 "Research "      On applicat…         19    30        63.3 "Resear…        11
+    ## 14 "Research "      On medical …         19    30        63.3 "Resear…        11
     ## 15 "Research "      On applicat…          8    30        26.7 "Resear…        22
 
 ``` r
@@ -5396,7 +5409,7 @@ year_significance_tests
     ## 1 To peers                                       0.25   1         2 ""          
     ## 2 To lab-mates or team members                   8.51   0.071     2 ""          
     ## 3 To mentors                                    15.2    0.002     2 "*"         
-    ## 4 On application to medical school              10.1    0.032     2 "*"         
+    ## 4 On medical school application                 10.1    0.032     2 "*"         
     ## 5 On application to residency/post-docto…       29.0    0         2 "*"
 
 Thus, we can see that the environments in which significant difference
@@ -5425,7 +5438,13 @@ year_plot <-
     size = 8, 
     nudge_y = 5
   )
-  
+
+year_plot
+```
+
+![](outness_report_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+
+``` r
 year_plot %>% 
   ggsave(
     filename = "year_plot.pdf", 
@@ -5552,23 +5571,48 @@ ball-and-stick plot to show that, as med students navigate more
 professional environments, the gap gets bigger.
 
 ``` r
-outness_data %>% 
+gap_frame <- 
+  outness_data %>% 
   # remove the following line if you want to include non-LGBTQ+ students
   filter(is_lgbtq == "LGBTQ+") %>% 
   filter(!(variable == "Out (or plan to be out)" & is_lgbtq == "Non-LGBTQ+")) %>% 
   group_by(variable, context) %>% 
   summarize(prop = sum(is_out == "yes") / n()) %>% 
   filter(variable != "Support ability to be out") %>% 
-  mutate(context = fct_reorder(context, desc(prop))) %>% 
+  mutate(context = fct_reorder(context, desc(prop)))
+  
+
+gap_plot <- 
+  gap_frame %>% 
   ggplot(aes(x = context, y = prop, fill = variable)) + 
   geom_line(aes(group = context), size = 2, color = "gray60") + 
   geom_point(shape = 21, color = "black", size = 4, stroke = 1) +
   geom_text(
-    aes(label = (prop * 100) %>% round(0) %>% str_c("%")), 
-    size = 4, 
-    position = position_dodge(width = 1.5), 
-    fontface = "bold"
+    data = 
+      gap_frame %>% 
+      filter(str_detect(variable, "plan to be out")),
+    aes(
+      label = (prop * 100) %>% round(0) %>% str_c("%")
+    ), 
+    size = 3, 
+    #position = position_dodge(width = 1), 
+    fontface = "bold",
+    nudge_x = 0.05,
+    nudge_y = -0.05
   ) + 
+  geom_text(
+    data = 
+      gap_frame %>% 
+      filter(str_detect(variable, "protections")),
+    aes(
+      label = (prop * 100) %>% round(0) %>% str_c("%")
+    ), 
+    size = 3, 
+    #position = position_dodge(width = 1), 
+    fontface = "bold",
+    nudge_x = 0.05,
+    nudge_y = 0.05
+  ) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
   scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   scale_fill_manual(
@@ -5586,6 +5630,8 @@ outness_data %>%
     caption = 
       str_glue("N = {lgbtq_n}", lgbtq_n = sum(na_data$is_lgbtq == "LGBTQ+", na.rm = TRUE))
   )
+
+gap_plot 
 ```
 
 ![](outness_report_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
@@ -5640,7 +5686,7 @@ outness_vs_support_tests
     ##   <chr>                                                   <dbl> <chr>    <dbl>
     ## 1 To peers                                                 12.3 2.3e-03      1
     ## 2 To lab-mates or team members                            213.  1.6e-47      1
-    ## 3 On application to medical school                        242.  7.4e-54      1
+    ## 3 On medical school application                           242.  7.4e-54      1
     ## 4 To mentors                                              361.  6.8e-80      1
     ## 5 On application to residency/post-doctoral studies       534.  2.2e-117     1
 
@@ -5694,7 +5740,7 @@ alluvium_plot <-
     labels = 
       c(
         "Out on medical school application?",
-        "Out on residency application?"
+        "Out on GME application?"
       ) %>% 
       str_wrap(width = 20),
     expand = c(0.1, 0.1)
@@ -5755,32 +5801,1120 @@ of medical school to the end of medical school.
 
 ### Figure 1
 
+``` r
+figure_1a <- 
+  overall_outness_plot + 
+  labs(y = "% of \"out\" students", subtitle = NULL)
+
+figure_1b <- 
+  so_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Sexual Orientation", 
+    fill = "Sexual Orientation"
+  )
+
+figure_1c <- 
+  gender_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Gender Identity", 
+    fill = "Gender Identity"
+  )
+
+figure_s1a <- 
+  race_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Race/Ethnicity", 
+    fill = "Race/Ethnicity"
+  )
+
+figure_s1b <- 
+  year_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Training Stage", 
+    fill = "Training Stage"
+  )
+
+figure_s1c <- 
+  degree_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Degree", 
+    fill = "Degree"
+  )
+
+layout <- "
+##AAAA###
+##AAAA###
+BBBBCCCCC
+BBBBCCCCC
+"
+
+figure_1 <- 
+  (figure_1a +
+  figure_1b + 
+  figure_1c ) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
+  plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+
+  
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version1.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 11, 
+    height = 8,
+    units = "in"
+  )
+```
+
+``` r
+figure_1 <- 
+  figure_1a / 
+  figure_1b / 
+  figure_1c +   
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
+  # plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version2.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7, 
+    height = 12,
+    units = "in"
+  )
+```
+
+### Supplementary figure 1
+
+``` r
+figure_s1 <- 
+  figure_s1a / 
+  figure_s1b / 
+  figure_s1c +   
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  # plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+figure_s1 %>% 
+    ggsave(
+    filename = "figure_s1.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6, 
+    height = 12,
+    units = "in"
+  )
+```
+
+``` r
+alternate_figure_1 <- 
+  wrap_plots(figure_1, figure_s1) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    legend.title = element_text(size = 12, face = "bold"), 
+    plot.tag = element_text(size = 20)
+  )
+  
+alternate_figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version3.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 13, 
+    height = 12,
+    units = "in"
+  )
+```
+
 ### Figure 2
 
-%\>% mutate( tables = map( .x = data, .f = \~ .x %\>%
-pivot\_wider(names\_from = context, values\_from = percent) %\>%
-select(-is\_lgbtq) %\>% as.matrix() %\>% as.table() ), chis = map(.x =
-tables, .f = \~ tidy(chisq.test(.x))) ) %\>% unnest(chis)
+``` r
+layout <- "
+AAAA
+BBCC
+"
 
-support\_chis
+figure_2a <- 
+  support_plot + 
+  labs(caption = NULL)
 
-.x
+figure_2b <- 
+  gap_plot + 
+  labs(caption = NULL) + 
+  theme(legend.position = "bottom")
 
-```` 
+figure_2c <- 
+  alluvium_plot + 
+  labs(subtitle = NULL, caption = NULL)
 
-## Some qualitative thoughts on "outness"
+figure_2 <- 
+  figure_2a +
+  figure_2b + 
+  figure_2c  + 
+  plot_layout(design = layout) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    plot.tag = element_text(size = 20)
+  )
 
-Students also offered some free-response information about being "out" in their lives and careers as medical students. We provide these answers below. 
+figure_2 %>% 
+    ggsave(
+    filename = "figure_2.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7.5, 
+    height = 9,
+    units = "in"
+  )
+```
 
+### Table 1
 
-```r
+``` r
+demo_table 
+```
+
+<table class="table table-striped table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
+
+<thead>
+
+<tr>
+
+<th style="text-align:left;">
+
+</th>
+
+<th style="text-align:left;">
+
+Full Sample
+
+</th>
+
+<th style="text-align:left;">
+
+Allopathic (MD)
+
+</th>
+
+<th style="text-align:left;">
+
+Osteopathic (DO)
+
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td style="text-align:left;font-weight: bold;">
+
+Overall
+
+</td>
+
+<td style="text-align:left;font-weight: bold;">
+
+1162 (100%)
+
+</td>
+
+<td style="text-align:left;font-weight: bold;">
+
+1082 (93.1%)
+
+</td>
+
+<td style="text-align:left;font-weight: bold;">
+
+80 (6.9%)
+
+</td>
+
+</tr>
+
+<tr grouplength="8">
+
+<td colspan="4" style="background-color: #666; color: #fff;">
+
+<strong>Gender</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Cisgender Woman
+
+</td>
+
+<td style="text-align:left;">
+
+652 (51.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+598 (47.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+54 (4.3%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Cisgender Man
+
+</td>
+
+<td style="text-align:left;">
+
+413 (32.6%)
+
+</td>
+
+<td style="text-align:left;">
+
+393 (31%)
+
+</td>
+
+<td style="text-align:left;">
+
+20 (1.6%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Gender-expansive
+
+</td>
+
+<td style="text-align:left;">
+
+96 (7.6%)
+
+</td>
+
+<td style="text-align:left;">
+
+90 (7.1%)
+
+</td>
+
+<td style="text-align:left;">
+
+6 (0.5%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Genderqueer/Gender non-conforming
+
+</td>
+
+<td style="text-align:left;">
+
+72 (5.7%)
+
+</td>
+
+<td style="text-align:left;">
+
+67 (5.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+5 (0.4%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Transgender Man
+
+</td>
+
+<td style="text-align:left;">
+
+13 (1%)
+
+</td>
+
+<td style="text-align:left;">
+
+13 (1%)
+
+</td>
+
+<td style="text-align:left;">
+
+0 (0%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Agender
+
+</td>
+
+<td style="text-align:left;">
+
+11 (0.9%)
+
+</td>
+
+<td style="text-align:left;">
+
+11 (0.9%)
+
+</td>
+
+<td style="text-align:left;">
+
+0 (0%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Another Gender Identity
+
+</td>
+
+<td style="text-align:left;">
+
+7 (0.6%)
+
+</td>
+
+<td style="text-align:left;">
+
+6 (0.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+1 (0.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Transgender Woman
+
+</td>
+
+<td style="text-align:left;">
+
+3 (0.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+3 (0.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+0 (0%)
+
+</td>
+
+</tr>
+
+<tr grouplength="9">
+
+<td colspan="4" style="background-color: #666; color: #fff;">
+
+<strong>Sexual Orientation</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Straight/Heterosexual
+
+</td>
+
+<td style="text-align:left;">
+
+521 (36%)
+
+</td>
+
+<td style="text-align:left;">
+
+498 (34.4%)
+
+</td>
+
+<td style="text-align:left;">
+
+23 (1.6%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Gay
+
+</td>
+
+<td style="text-align:left;">
+
+239 (16.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+221 (15.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+18 (1.2%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Bisexual
+
+</td>
+
+<td style="text-align:left;">
+
+224 (15.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+208 (14.4%)
+
+</td>
+
+<td style="text-align:left;">
+
+16 (1.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Queer
+
+</td>
+
+<td style="text-align:left;">
+
+215 (14.9%)
+
+</td>
+
+<td style="text-align:left;">
+
+200 (13.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+15 (1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Pansexual
+
+</td>
+
+<td style="text-align:left;">
+
+82 (5.7%)
+
+</td>
+
+<td style="text-align:left;">
+
+72 (5%)
+
+</td>
+
+<td style="text-align:left;">
+
+10 (0.7%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Lesbian
+
+</td>
+
+<td style="text-align:left;">
+
+82 (5.7%)
+
+</td>
+
+<td style="text-align:left;">
+
+70 (4.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+12 (0.8%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Questioning
+
+</td>
+
+<td style="text-align:left;">
+
+37 (2.6%)
+
+</td>
+
+<td style="text-align:left;">
+
+33 (2.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+4 (0.3%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Asexual
+
+</td>
+
+<td style="text-align:left;">
+
+34 (2.4%)
+
+</td>
+
+<td style="text-align:left;">
+
+31 (2.1%)
+
+</td>
+
+<td style="text-align:left;">
+
+3 (0.2%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Another Sexual Orientation
+
+</td>
+
+<td style="text-align:left;">
+
+12 (0.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+11 (0.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+1 (0.1%)
+
+</td>
+
+</tr>
+
+<tr grouplength="7">
+
+<td colspan="4" style="background-color: #666; color: #fff;">
+
+<strong>Race/Ethnicity</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+White/Caucasian
+
+</td>
+
+<td style="text-align:left;">
+
+870 (67.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+812 (62.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+58 (4.5%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Asian
+
+</td>
+
+<td style="text-align:left;">
+
+184 (14.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+169 (13.1%)
+
+</td>
+
+<td style="text-align:left;">
+
+15 (1.2%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Latino or Hispanic
+
+</td>
+
+<td style="text-align:left;">
+
+127 (9.8%)
+
+</td>
+
+<td style="text-align:left;">
+
+113 (8.7%)
+
+</td>
+
+<td style="text-align:left;">
+
+14 (1.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Black or African American
+
+</td>
+
+<td style="text-align:left;">
+
+71 (5.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+71 (5.5%)
+
+</td>
+
+<td style="text-align:left;">
+
+0 (0%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Another Race
+
+</td>
+
+<td style="text-align:left;">
+
+18 (1.4%)
+
+</td>
+
+<td style="text-align:left;">
+
+18 (1.4%)
+
+</td>
+
+<td style="text-align:left;">
+
+0 (0%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+American Indian or Alaska Native
+
+</td>
+
+<td style="text-align:left;">
+
+13 (1%)
+
+</td>
+
+<td style="text-align:left;">
+
+12 (0.9%)
+
+</td>
+
+<td style="text-align:left;">
+
+1 (0.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Native Hawaiian or Other Pacific Islander
+
+</td>
+
+<td style="text-align:left;">
+
+9 (0.7%)
+
+</td>
+
+<td style="text-align:left;">
+
+4 (0.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+5 (0.4%)
+
+</td>
+
+</tr>
+
+<tr grouplength="4">
+
+<td colspan="4" style="background-color: #666; color: #fff;">
+
+<strong>Year in School</strong>
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Pre-Clinical Student
+
+</td>
+
+<td style="text-align:left;">
+
+711 (61.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+663 (57.1%)
+
+</td>
+
+<td style="text-align:left;">
+
+48 (4.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Clinical Student
+
+</td>
+
+<td style="text-align:left;">
+
+374 (32.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+344 (29.6%)
+
+</td>
+
+<td style="text-align:left;">
+
+30 (2.6%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Research
+
+</td>
+
+<td style="text-align:left;">
+
+50 (4.3%)
+
+</td>
+
+<td style="text-align:left;">
+
+49 (4.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+1 (0.1%)
+
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left; padding-left:  2em;" indentlevel="1">
+
+Other
+
+</td>
+
+<td style="text-align:left;">
+
+26 (2.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+25 (2.2%)
+
+</td>
+
+<td style="text-align:left;">
+
+1 (0.1%)
+
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+## Some qualitative thoughts on “outness”
+
+Students also offered some free-response information about being “out”
+in their lives and careers as medical students. We provide these answers
+below.
+
+``` r
 na_data %>% 
   select(out_other_explanation) %>% 
   drop_na() %>% 
-  knitr::kable()
-````
+  knitr::kable() %>% 
+  kable_styling()
+```
 
-<table>
+<table class="table" style="margin-left: auto; margin-right: auto;">
 
 <thead>
 

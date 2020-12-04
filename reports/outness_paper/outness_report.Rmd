@@ -4,9 +4,9 @@ author: "Timothy Keyes"
 date: "`r Sys.Date()`"
 always_allow_html: true
 output: 
-  html_document: 
-    toc: true
   github_document:
+    toc: true
+  html_document: 
     toc: true
 ---
 
@@ -86,7 +86,7 @@ context_recode <-
     "classmates_peers" = "To peers", 
     "labmates_coworkers_team" = "To lab-mates or team members", 
     "mentors" = "To mentors", 
-    "medical_school_app" = "On application to medical school", 
+    "medical_school_app" = "On medical school application", 
     "residency_app" = "On application to residency/post-doctoral studies"
   )
 
@@ -178,7 +178,9 @@ na_data <-
   left_join(metadata, by = c("school_attend" = "name")) %>% 
   # some minor adjustments to variables that we'll use a lot 
   mutate(
-    degree_type = factor(degree, levels = c("MD", "DO")), 
+    degree_type = 
+      factor(degree, levels = c("MD", "DO")) %>% 
+      fct_recode("allopathic" = "MD", "osteopathic" = "DO"), 
     med_school_year = str_remove(med_school_year, pattern = "\\(.+\\)")
   ) %>% 
   select(-degree) %>% 
@@ -211,7 +213,7 @@ The first section of the survey asked questions about respondents' demographic i
 * Their race/ethnicity (variables that start with `race_`)
 * If they attend an MD or a DO program (`degree_type`)
 
-Note that working with the columns starting with `gender_`, `so_`, and `race_` is a little tricky because none of the categories is mutually-exclusive (someone can identify as both "gay" and "lesbian", for instance). So, even though we can describe variables encoding gender, sexual orientation, and race as categorical, we have to be careful when we compare them (it's not as easy as just setting up a single factor variable for gender, sexual orientation, and race!).  
+Note that working with the columns starting with `gender_`, `so_`, and `race_` is a little tricky because none of the categories are mutually-exclusive (someone can identify as both "gay" and "lesbian", for instance). So, even though we can describe variables encoding gender, sexual orientation, and race as categorical, we have to be careful when we compare them (it's not as easy as just setting up a single factor variable for gender, sexual orientation, and race!).  
 
 Below, we look into the breakdown of our survey respondents by each of these demographics.
 
@@ -386,16 +388,17 @@ demo_combined <-
         levels = c("gender", "so", "race", "med_school_year")
       )
   ) %>% 
-  arrange(variable_type, desc(MD_count)) %>% 
+  arrange(variable_type, desc(allopathic_count)) %>% 
   select(-variable_type)
 
-demo_overall %>% 
+demo_table <- 
+  demo_overall %>% 
   bind_rows(demo_combined) %>%
   transmute(
     recode(variable, !!! recode_values),  
     `Full Sample` = str_glue("{`Full Sample_count`} ({`Full Sample_percentage`}%)"), 
-    `Allopathic (MD)` = str_glue("{MD_count} ({MD_percentage}%)"), 
-    `Osteopathic (DO)` = str_glue("{DO_count} ({DO_percentage}%)"), 
+    `Allopathic (MD)` = str_glue("{allopathic_count} ({allopathic_percentage}%)"), 
+    `Osteopathic (DO)` = str_glue("{osteopathic_count} ({osteopathic_percentage}%)"), 
   ) %>% 
   kable(col.names = c(" ", colnames(.)[-1])) %>% 
   kable_styling(
@@ -406,7 +409,9 @@ demo_overall %>%
   pack_rows("Gender", 2, 9, label_row_css = "background-color: #666; color: #fff;") %>%
   pack_rows("Sexual Orientation", 10, 18, label_row_css = "background-color: #666; color: #fff;") %>% 
   pack_rows("Race/Ethnicity", 19, 25, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;") 
+  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;")
+
+demo_table
 ```
 
 
@@ -641,8 +646,8 @@ overall_outness_plot <-
   ) + 
   geom_text(
     aes(label = str_c(percent_out, "%")), 
-    nudge_y = 7.5, 
-    nudge_x = 0.08
+    nudge_y = 8.5, 
+    nudge_x = 0.13
   ) + 
   geom_text(
     aes(label = significant), 
@@ -1465,23 +1470,48 @@ From this plot, we can see that in general there's a pretty large difference bet
 I find the "gap" between LGBTQ+ medical students' actual "outness" and the degree of support that "outness" has among medical students to be really striking. To visualize this gap more explicitly, we can use a ball-and-stick plot to show that, as med students navigate more professional environments, the gap gets bigger.
 
 ```{r}
-outness_data %>% 
+gap_frame <- 
+  outness_data %>% 
   # remove the following line if you want to include non-LGBTQ+ students
   filter(is_lgbtq == "LGBTQ+") %>% 
   filter(!(variable == "Out (or plan to be out)" & is_lgbtq == "Non-LGBTQ+")) %>% 
   group_by(variable, context) %>% 
   summarize(prop = sum(is_out == "yes") / n()) %>% 
   filter(variable != "Support ability to be out") %>% 
-  mutate(context = fct_reorder(context, desc(prop))) %>% 
+  mutate(context = fct_reorder(context, desc(prop)))
+  
+
+gap_plot <- 
+  gap_frame %>% 
   ggplot(aes(x = context, y = prop, fill = variable)) + 
   geom_line(aes(group = context), size = 2, color = "gray60") + 
   geom_point(shape = 21, color = "black", size = 4, stroke = 1) +
   geom_text(
-    aes(label = (prop * 100) %>% round(0) %>% str_c("%")), 
-    size = 4, 
-    position = position_dodge(width = 1.5), 
-    fontface = "bold"
+    data = 
+      gap_frame %>% 
+      filter(str_detect(variable, "plan to be out")),
+    aes(
+      label = (prop * 100) %>% round(0) %>% str_c("%")
+    ), 
+    size = 3, 
+    #position = position_dodge(width = 1), 
+    fontface = "bold",
+    nudge_x = 0.05,
+    nudge_y = -0.05
   ) + 
+  geom_text(
+    data = 
+      gap_frame %>% 
+      filter(str_detect(variable, "protections")),
+    aes(
+      label = (prop * 100) %>% round(0) %>% str_c("%")
+    ), 
+    size = 3, 
+    #position = position_dodge(width = 1), 
+    fontface = "bold",
+    nudge_x = 0.05,
+    nudge_y = 0.05
+  ) +
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
   scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
   scale_fill_manual(
@@ -1499,6 +1529,8 @@ outness_data %>%
     caption = 
       str_glue("N = {lgbtq_n}", lgbtq_n = sum(na_data$is_lgbtq == "LGBTQ+", na.rm = TRUE))
   )
+
+gap_plot 
 ```
 
 This plot makes it really easy to see that, as we move from the right side (the "less professional" side of the plot) to the right side of the plot (the "more professional side"), the disparity between the proportion of "out" students and the number of supportive students gets progressively larger. 
@@ -1653,7 +1685,7 @@ alluvium_plot <-
     labels = 
       c(
         "Out on medical school application?",
-        "Out on residency application?"
+        "Out on GME application?"
       ) %>% 
       str_wrap(width = 20),
     expand = c(0.1, 0.1)
@@ -1696,15 +1728,221 @@ In the middle of the plot, we see that a large "chunk" of orange students cross 
 ### Figure 1
 
 ```{r}
+figure_1a <- 
+  overall_outness_plot + 
+  labs(y = "% of \"out\" students", subtitle = NULL)
+
+figure_1b <- 
+  so_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Sexual Orientation", 
+    fill = "Sexual Orientation"
+  )
+
+figure_1c <- 
+  gender_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Gender Identity", 
+    fill = "Gender Identity"
+  )
+
+figure_s1a <- 
+  race_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Race/Ethnicity", 
+    fill = "Race/Ethnicity"
+  )
+
+figure_s1b <- 
+  year_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Training Stage", 
+    fill = "Training Stage"
+  )
+
+figure_s1c <- 
+  degree_plot + 
+  labs(
+    subtitle = NULL, 
+    y = "% of \"out\" students", 
+    color = "Degree", 
+    fill = "Degree"
+  )
+
+layout <- "
+##AAAA###
+##AAAA###
+BBBBCCCCC
+BBBBCCCCC
+"
+
+figure_1 <- 
+  (figure_1a +
+  figure_1b + 
+  figure_1c ) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
+  plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+
+  
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version1.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 11, 
+    height = 8,
+    units = "in"
+  )
+
 
 ```
+
+```{r}
+figure_1 <- 
+  figure_1a / 
+  figure_1b / 
+  figure_1c +   
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
+  # plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version2.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7, 
+    height = 12,
+    units = "in"
+  )
+```
+
+
+### Supplementary figure 1
+
+```{r}
+figure_s1 <- 
+  figure_s1a / 
+  figure_s1b / 
+  figure_s1c +   
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  # plot_layout(design = layout) & 
+  theme(
+    axis.text.x = element_text(size = 9),
+    plot.tag = element_text(size = 20)
+  )
+
+figure_s1 %>% 
+    ggsave(
+    filename = "figure_s1.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6, 
+    height = 12,
+    units = "in"
+  )
+
+```
+
+```{r}
+alternate_figure_1 <- 
+  wrap_plots(figure_1, figure_s1) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    legend.title = element_text(size = 12, face = "bold"), 
+    plot.tag = element_text(size = 20)
+  )
+  
+alternate_figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version3.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 13, 
+    height = 12,
+    units = "in"
+  )
+```
+
 
 ### Figure 2
 
 ```{r}
+layout <- "
+AAAA
+BBCC
+"
 
+figure_2a <- 
+  support_plot + 
+  labs(caption = NULL)
+
+figure_2b <- 
+  gap_plot + 
+  labs(caption = NULL) + 
+  theme(legend.position = "bottom")
+
+figure_2c <- 
+  alluvium_plot + 
+  labs(subtitle = NULL, caption = NULL)
+
+figure_2 <- 
+  figure_2a +
+  figure_2b + 
+  figure_2c  + 
+  plot_layout(design = layout) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    plot.tag = element_text(size = 20)
+  )
+
+figure_2 %>% 
+    ggsave(
+    filename = "figure_2.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7.5, 
+    height = 9,
+    units = "in"
+  )
+  
 ```
 
+### Table 1
+
+```{r}
+
+demo_table 
+
+```
 
 
 

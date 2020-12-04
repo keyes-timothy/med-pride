@@ -104,7 +104,7 @@ recode_values <-
 context_recode <- 
   c(
     "classmates_peers" = "To peers", 
-    "labmates_coworkers_team" = "To lab-mates or team members", 
+    "labmates_coworkers_team" = "To lab- and team-members", 
     "mentors" = "To mentors", 
     "medical_school_app" = "On medical school application", 
     "residency_app" = "On application to residency/post-doctoral studies"
@@ -4912,7 +4912,7 @@ plot_outness <-
       mutate(
         environment = 
           recode(environment, !!! context_recode) %>% 
-          fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
+          factor(levels = environment_levels), # just changed this
         identity = fct_reorder2(identity, environment, percent_out)
       )
     
@@ -5200,7 +5200,7 @@ label_frame
     ##   environment               identity   number_out     n percent_out significance
     ##   <fct>                     <fct>           <int> <int>       <dbl> <chr>       
     ## 1 To peers                  cisgender…        254   284        89.4 ""          
-    ## 2 To lab-mates or team mem… cisgender…        146   284        51.4 "*"         
+    ## 2 To lab- and team-members  cisgender…        146   284        51.4 "*"         
     ## 3 On medical school applic… cisgender…        122   284        43.0 "*"         
     ## 4 To mentors                cisgender…        105   284        37.0 "*"         
     ## 5 On application to reside… cisgender…         65   284        22.9 "*"
@@ -5354,17 +5354,17 @@ year_outness
     ##    med_school_year  environment  number_out     n percent_out identity number_in
     ##    <chr>            <chr>             <int> <int>       <dbl> <chr>        <int>
     ##  1 "Clinical Stude… To peers            184   201        91.5 "Clinic…        17
-    ##  2 "Clinical Stude… To lab-mate…        111   201        55.2 "Clinic…        90
+    ##  2 "Clinical Stude… To lab- and…        111   201        55.2 "Clinic…        90
     ##  3 "Clinical Stude… To mentors          106   201        52.7 "Clinic…        95
     ##  4 "Clinical Stude… On medical …         95   201        47.3 "Clinic…       106
     ##  5 "Clinical Stude… On applicat…         85   201        42.3 "Clinic…       116
     ##  6 "Pre-Clinical S… To peers            346   383        90.3 "Pre-Cl…        37
-    ##  7 "Pre-Clinical S… To lab-mate…        224   383        58.5 "Pre-Cl…       159
+    ##  7 "Pre-Clinical S… To lab- and…        224   383        58.5 "Pre-Cl…       159
     ##  8 "Pre-Clinical S… To mentors          160   383        41.8 "Pre-Cl…       223
     ##  9 "Pre-Clinical S… On medical …        232   383        60.6 "Pre-Cl…       151
     ## 10 "Pre-Clinical S… On applicat…         81   383        21.1 "Pre-Cl…       302
     ## 11 "Research "      To peers             27    30        90   "Resear…         3
-    ## 12 "Research "      To lab-mate…         25    30        83.3 "Resear…         5
+    ## 12 "Research "      To lab- and…         25    30        83.3 "Resear…         5
     ## 13 "Research "      To mentors           22    30        73.3 "Resear…         8
     ## 14 "Research "      On medical …         19    30        63.3 "Resear…        11
     ## 15 "Research "      On applicat…          8    30        26.7 "Resear…        22
@@ -5407,7 +5407,7 @@ year_significance_tests
     ##   environment                             chi_squared p_value    df significance
     ##   <chr>                                         <dbl>   <dbl> <dbl> <chr>       
     ## 1 To peers                                       0.25   1         2 ""          
-    ## 2 To lab-mates or team members                   8.51   0.071     2 ""          
+    ## 2 To lab- and team-members                       8.51   0.071     2 ""          
     ## 3 To mentors                                    15.2    0.002     2 "*"         
     ## 4 On medical school application                 10.1    0.032     2 "*"         
     ## 5 On application to residency/post-docto…       29.0    0         2 "*"
@@ -5685,7 +5685,7 @@ outness_vs_support_tests
     ##   environment                                       chi_squared p_value     df
     ##   <chr>                                                   <dbl> <chr>    <dbl>
     ## 1 To peers                                                 12.3 2.3e-03      1
-    ## 2 To lab-mates or team members                            213.  1.6e-47      1
+    ## 2 To lab- and team-members                                213.  1.6e-47      1
     ## 3 On medical school application                           242.  7.4e-54      1
     ## 4 To mentors                                              361.  6.8e-80      1
     ## 5 On application to residency/post-doctoral studies       534.  2.2e-117     1

@@ -84,7 +84,7 @@ recode_values <-
 context_recode <- 
   c(
     "classmates_peers" = "To peers", 
-    "labmates_coworkers_team" = "To lab-mates or team members", 
+    "labmates_coworkers_team" = "To lab- and team-members", 
     "mentors" = "To mentors", 
     "medical_school_app" = "On medical school application", 
     "residency_app" = "On application to residency/post-doctoral studies"
@@ -953,7 +953,7 @@ plot_outness <-
       mutate(
         environment = 
           recode(environment, !!! context_recode) %>% 
-          fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
+          factor(levels = environment_levels), # just changed this
         identity = fct_reorder2(identity, environment, percent_out)
       )
     

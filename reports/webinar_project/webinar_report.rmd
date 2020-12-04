@@ -1,0 +1,440 @@
+---
+title: Pre-med webinar analyses
+author: 
+date: "`r Sys.Date()`"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(ggthemes)
+library(readxl)
+library(waffle)
+
+# source utilities
+
+source(here::here("scripts", "utils_mspa.R"))
+
+# Parameters
+input_path <- 
+  here::here("data-raw", "webinar.xlsx")
+
+agreement_levels <- 
+  c(
+    "Strongly disagree", 
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
+
+concern_levels <- 
+  c(
+    "Extremely concerned", 
+    "Somewhat concerned", 
+    "Moderately concerned", 
+    "Slightly concerned", 
+    "Not at all concerned"
+  ) %>% 
+  rev()
+
+prepared_levels <- 
+  c(
+    "Extremely prepared",
+    "Moderately prepared", 
+    "Somewhat prepared", 
+    "Slightly prepared", 
+    "Not at all prepared"
+  ) %>% 
+  rev()
+
+asset_levels <- 
+  c(
+    "Hindrance", 
+    "Slight hindrance", 
+    "Neither hindrance/asset", 
+    "Slight asset", 
+    "Asset"
+  )
+
+agreement_variables <- 
+  c(
+    "pre_confident_out", 
+    "pre_support_advisors", 
+    "pre_important_community", 
+    "pre_value_mentors_advisors", 
+    "post_confident_out", 
+    "post_support_advisors", 
+    "post_important_community", 
+    "post_value_mentors_advisors", 
+    "webinar_helped"
+  )
+
+col_names <-
+  c(
+    "pre_confident_out", 
+    "pre_support_advisors", 
+    "pre_important_community", 
+    "pre_value_mentors_advisors", 
+    "pre_concern_applying", 
+    "pre_prepared_applying", 
+    "pre_asset_hindrance", 
+    "pre_asset_hindrance_comment", 
+    "what_are_your_concerns",
+    "experiences_premed_advising",
+    "post_confident_out", 
+    "post_support_advisors", 
+    "post_important_community", 
+    "post_value_mentors_advisors", 
+    "webinar_helped", 
+    "post_concern_applying", 
+    "post_prepared_applying", 
+    "post_asset_hindrance", 
+    "asset_hindrance_changed", 
+    "new_concerns", 
+    "final_comments"
+  )
+```
+
+## Read in and clean data
+
+```{r, read_data}
+webinar_data <- 
+  input_path %>% 
+  read_excel(col_names = col_names, skip = 2) %>% 
+  mutate(
+    respondent_id = 1:n(), 
+    across(contains("asset"), ordered, levels = asset_levels), 
+    across(any_of(agreement_variables), ordered, levels = agreement_levels), 
+    across(contains("prepared"), ordered, levels = prepared_levels), 
+    across(contains("concern"), ordered, levels = concern_levels)
+  )
+  
+col_descriptors <- 
+  input_path %>% 
+  read_excel() %>% 
+  .[1,] %>% 
+  as.character() %>% 
+  setNames(object = ., nm = col_names)
+```
+
+```{r, eval = FALSE}
+colnames(webinar_data)
+```
+
+
+A function for plotting and significance testing for pre- and post-webinar questions
+```{r}
+analyze_pre_post <- function(name = "") { 
+  
+  subtitle <- 
+    col_descriptors[str_c("pre_",name)] %>% 
+    str_remove(pattern = "^.+-") %>% 
+    str_wrap(width = 70)
+  
+  my_data <- 
+    webinar_data %>% 
+    select(contains(name), respondent_id, -contains("comment"), -contains("changed")) %>% 
+    pivot_longer(
+      cols = contains(name), 
+      names_to = c("timepoint"), 
+      values_to = "response"
+    ) %>% 
+    drop_na() %>%
+    group_by(respondent_id) %>% 
+    filter(n() > 1) %>% 
+    ungroup() %>% 
+    mutate(
+      timepoint = 
+        str_extract(timepoint, pattern = "^[:alpha:]+") %>% 
+        factor(levels = c("pre", "post")) %>% 
+        fct_recode(`Pre-survey` = "pre", `Post-survey` = "post")
+    )
+  
+  contingency_table <-
+    table(
+      my_data %>% 
+        pull(timepoint), 
+      my_data %>% 
+        pull(response)
+    ) %>% 
+    t()
+  
+  overall_chi_squared <- 
+    contingency_table %>% 
+    chisq.test(simulate.p.value = TRUE, B = 2000)
+  
+  t_statistic <- t.test(
+    x = 
+      my_data %>% 
+      filter(timepoint == "Pre-survey") %>% 
+      pull(response) %>% 
+      as.numeric(), 
+    y =
+      my_data %>% 
+      filter(timepoint == "Post-survey") %>% 
+      pull(response) %>% 
+      as.numeric(),
+    paired = TRUE
+  )
+  
+  mean_data <- 
+    my_data %>% 
+    group_by(timepoint) %>% 
+    summarize(response = mean(as.numeric(response)))
+  
+  my_likert <- 
+    my_data %>% 
+    mutate(
+      timepoint = fct_rev(timepoint), 
+      
+    ) %>% 
+    likert_plot(
+      my_var = response, 
+      break_var = timepoint, 
+      title = NULL, 
+      n = n_distinct(my_data$respondent_id)
+    ) + 
+    labs(
+      caption = 
+        str_glue(
+          "N = {my_n}; p = {my_p}", 
+          my_n = n_distinct(my_data$respondent_id), 
+          my_p = t_statistic$p.value %>% round(4)
+        )
+    )
+  
+  my_plot <-
+    my_data %>% 
+    ggplot(aes(x = timepoint, y = response)) + 
+    geom_line(aes(group = respondent_id), color = "gray", alpha = 0.6) + 
+    geom_count(color = "gray", alpha = 0.6) +  
+    geom_line(
+      aes(x = timepoint, y = response, group = 1), 
+      data = mean_data, 
+      color = "black", 
+      size = 1.5
+    ) + 
+    geom_point(
+      aes(x = timepoint, y = response), 
+      data = mean_data, 
+      color = "black", 
+      size = 4
+    ) + 
+    scale_x_discrete(drop = FALSE) + 
+    scale_size_area(breaks = 1:5) + 
+    labs(
+      subtitle = subtitle, 
+      x = NULL, 
+      y = NULL, 
+      size = "Number of students",
+      caption = 
+        str_glue(
+          "N = {my_n}; p = {my_p}", 
+          my_n = n_distinct(my_data$respondent_id), 
+          my_p = t_statistic$p.value %>% round(4)
+        )
+    )
+  
+  my_result <- 
+    list(
+      means = mean_data, 
+      plot = my_plot, 
+      likert = my_likert, 
+      t = t_statistic
+    )
+  
+  return(my_result)
+}
+```
+
+## Visualizations
+
+### Did the webinar help?
+
+```{r}
+n <- 
+  webinar_data %>% 
+  filter(!is.na(webinar_helped)) %>% 
+  count() %>%
+  pull(n)
+
+ns <- 
+  webinar_data %>% 
+  filter(!is.na(webinar_helped)) %>% 
+  count(webinar_helped) %>% 
+  pull(n)
+
+n_somewhat <- ns[[1]]
+n_strongly <- ns[[2]]
+
+webinar_data %>% 
+  drop_na(webinar_helped) %>% 
+  count(webinar_helped) %>% 
+  ggplot(aes(fill = webinar_helped, values = n)) + 
+  geom_waffle(color = "white", n_rows = 3, size = 0.25, make_proportional = FALSE) + 
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_continuous(
+    labels = function(x) x * 3, 
+    expand = c(0, 0)
+  ) +
+  ggthemes::scale_fill_tableau(
+    name = NULL, 
+    labels = 
+      c(
+        str_glue("Somewhat agree ({n_somewhat})"), 
+        str_glue("Strongly agree ({n_strongly})")
+      ),
+    palette = "Tableau 10"
+  ) +
+  coord_equal() +
+  theme_minimal() + 
+  theme(
+    strip.text = element_text(angle = 0, hjust = 0), 
+    panel.grid = element_blank(), 
+    axis.ticks.x = element_line(), 
+    legend.position = "bottom"
+  ) + 
+  labs(
+    subtitle = "\"This webinar helped me decide how to best to apply as an LGBTQ+ student\"",
+    x = "Number of students"
+  )
+```
+
+So overall, it looks like most students self-reported that the webinar was helpful to them.
+
+### Pre and post comparisons
+
+Now we can delve into some of the pre- and post-webinar comparisons. For these analyses, I mostly 
+treated the likert data on an ordinal 1-5 scale. For the significance testing, I either averaged the 
+ordinal values for pre- and post- and performed a paired t-test or used a Chi-squared test for goodness 
+of fit on the overall contingency tables. I also made two ways of visualizing the responses...any of this 
+can be changed, but it was my first-pass for feedback. 
+
+Note that for the line plots, the big bold line represents the mean change and each of the gray, smaller 
+lines represents an individual person.
+
+Also note that, right now, for any given question, I throw away all the responses that don't have both 
+pre- and post-webinar answers. For many people, there are answers in the pre-webinar section (but not the
+post-webinar section), and in theory I could include those responses in the analyses if we want...I'm trying
+to make up my mind if that's something I want to do, since it will change the statistics a little bit. 
+
+
+**Confidence applying to medical school as an out LGBTQ+ person**
+```{r}
+confident_result <- analyze_pre_post(name = "confident_out")
+
+confident_plot <- 
+  confident_result$likert + 
+  labs(title = "\"I feel confident in my decision about whether or not to be out on \n my application to medical school as an LGBTQ+ person.\"")
+
+ggsave(
+    filename = 
+      'confident.pdf', 
+    plot = confident_plot, 
+    device = "pdf", 
+    path = here::here("figures", "webinar"), 
+    width = 9, 
+    height = 4
+  )
+```
+
+
+**Feeling supported by your advisors**
+```{r}
+analyze_pre_post(name = "support_advisors")
+```
+
+**Importance of finding an LGBTQ+ friendly community**
+```{r}
+analyze_pre_post(name = "important_community")
+```
+
+**Value having access to LGBTQ+ mentors/advisors **
+```{r}
+analyze_pre_post(name = "value_mentors_advisors")
+```
+
+**Concern about applying to medical school as an out LGBTQ+ person**
+```{r}
+concern_result <- analyze_pre_post(name = "concern_applying")
+
+concern_plot <- 
+  concern_result$likert + 
+  labs(title = "\"How concerned are you about applying to medical school as an LGBTQ+ person?\"\n")
+
+ggsave(
+    filename = 
+      'concern.pdf', 
+    plot = concern_plot, 
+    device = "pdf", 
+    path = here::here("figures", "webinar"), 
+    width = 9, 
+    height = 4
+  )
+```
+
+
+**Preparedness applying to medical school as an LGBTQ+ person**
+```{r}
+prepared_result <- analyze_pre_post(name = "prepared_applying")
+
+prepared_plot <- 
+  prepared_result$likert + 
+  labs(title = "\"How prepared do you feel regarding applying to medical school as an LGBTQ+ person?\"")
+
+ggsave(
+    filename = 
+      'prepared.pdf', 
+    plot = prepared_plot, 
+    device = "pdf", 
+    path = here::here("figures", "webinar"), 
+    width = 9, 
+    height = 4
+  )
+```
+
+**Do you see being LGBTQ+ as an asset or a hindrance in your application process?**
+```{r}
+asset_result <- analyze_pre_post(name = "asset_hindrance")
+
+asset_plot <- 
+  asset_result$likert + 
+  labs(title = "\"Do you see your LGBTQ+ identity as more of an asset or a\n hindrance in the medical school application process?\"")
+
+ggsave(
+    filename = 'asset.pdf', 
+    plot = asset_plot, 
+    device = "pdf", 
+    path = here::here("figures", "webinar"), 
+    width = 9, 
+    height = 4
+  )
+```
+
+
+## Final comments
+
+```{r}
+webinar_data %>% 
+  select(`Any final comments?` = final_comments) %>% 
+  drop_na() %>% 
+  knitr::kable()
+```
+
+# Final figure for paper 
+
+```{r}
+
+
+
+```
+
+

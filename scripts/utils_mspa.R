@@ -59,7 +59,7 @@ likert_plot <-
       coord_flip() + 
       theme_minimal() + 
       theme(
-        legend.title = element_text(size = 9),
+        legend.title = element_text(size = 0.5),
         aspect.ratio = 0.4, 
         legend.position = "bottom"
       ) +  

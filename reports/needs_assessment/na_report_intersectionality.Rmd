@@ -1,0 +1,117 @@
+---
+title: "Needs Assessment Report (Intersectionality)" 
+author: "Timothy Keyes" 
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, dpi = 250)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(lubridate)
+library(writexl)
+
+# Parameters
+input_path <- here::here("data", "mspa_na_data.rds")
+metadata_path <- here::here("data-raw", "school_metadata.csv")
+
+intersectionality_path <- 
+  here::here("data", "intersectionality.xlsx")
+
+total_md <- 153
+total_do <- 36
+
+likert_colors <- c("darkgreen","green","orange","red","darkred")
+
+likert_labels <- 
+  c(
+    "Strongly disagree",
+    "Somewhat disagree", 
+    "Neither agree nor disagree", 
+    "Somewhat agree", 
+    "Strongly agree"
+  )
+
+my_theme <- 
+  theme(
+    axis.text.y = element_text(size = 9),
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+    axis.title.y = element_text(size = 12, face = "bold"), 
+    axis.title.x = element_text(size = 12, face = "bold")
+  ) 
+
+mspa_hex <- "#666699"
+
+#===============================================================================
+
+# read in data
+na_data <- 
+  input_path %>% 
+  read_rds()
+
+metadata <- 
+  metadata_path %>% 
+  read_csv() %>% 
+  drop_na()
+```
+
+```{r}
+na_data <- 
+  na_data %>% 
+  filter(consent == "yes") %>% 
+  select(-survey_id, -consent, -complete) %>% 
+  mutate(
+    sex = 
+      case_when(
+        sab_is_male == "yes"   ~ "male", 
+        sab_is_female == "yes" ~ "female", 
+        TRUE                   ~ NA_character_
+      )
+  ) %>% 
+  left_join(metadata, by = c("school_attend" = "name"))
+```
+
+## How can MSPA promote intersectionality in its activities? 
+
+We asked students for free-text responses to the following question: 
+
+>The LGBTQ community represents a wide array of identities and viewpoints, particularly with regard to issues of intersectionality. In what ways would an intercollegiate medical student organization best represent all of these viewpoints in an equitable way, especially regarding queer and trans people of color?
+
+and `r sum(!is.na(na_data$intersectionality))` of them responded. Here are the responses: 
+
+```{r}
+na_data %>% 
+  drop_na(intersectionality) %>% 
+  select(Intersectionality = intersectionality) %>% 
+  knitr::kable()
+```
+
+
+```{r}
+## Generate excel files for qualitative analysis
+
+na_data %>% 
+  drop_na(intersectionality) %>% 
+  select(
+    school_attend, 
+    med_school_year, 
+    is_lgbtq, 
+    starts_with("so_"), 
+    sex,
+    starts_with("gender_"), 
+    starts_with("race_"),
+    Intersectionality = intersectionality
+  ) %>% 
+  write_xlsx(path = intersectionality_path)
+```
+
+
+

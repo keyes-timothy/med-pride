@@ -1,0 +1,190 @@
+---
+title: "Chapter Map"
+author: "tkeyes"
+date: "3/29/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+# Libraries
+library(tidyverse)
+library(readxl)
+library(writexl)
+library(sf)
+library(leaflet)
+library(leaflet.mapboxgl)
+library(htmlwidgets)
+
+
+# Parameters 
+
+geo_path <- 
+  here::here("data-raw", "chapter_map.kml")
+
+metadata_path <- 
+  here::here("data-raw", "chapters_metadata.xlsx")
+
+additional_metadata_path <- 
+  here::here("data-raw", "chapters_additional_metadata.xlsx")
+
+rds_path <- 
+  here::here("data", "chapter_map.rds")
+
+json_path <- 
+  here::here("data", "chapter_map.geojson")
+
+recode_vars <- 
+  c(
+    "Renaissance SOM at Stony Brook" = 
+      "Renaissance School of Medicine at Stony Brook University",
+    "Stanford Medical Schools" = "Stanford Medical School", 
+    "UT Southwestern" = "UT Southwestern School of Health Professions", 
+    "Columbia University" = 
+      "Columbia University Vagelos College of Physicians and Surgeons",
+    "University of Vermont" = 
+      "The Robert Larner, M.D. College of Medicine at The University of Vermont",
+    "Johns Hopkins" = "The Johns Hopkins University School of Medicine", 
+    "Penn State University College of Medicine" = 
+      "Penn State College of Medicine",
+    "University of Arizona College of Medicine Phoenix" = 
+      "The University of Arizona College of Medicine - Phoenix",  
+    "University of California, Irvine School of Medicine" = 
+      "University of California, Irvine, School of Medicine",
+    "McGovern Medical School at UTHSC Houston" = 
+      "McGovern Medical School at UTHealth", 
+    "Florida Atlantic University, Charles E. Schmidt College of Medicine" = 
+      "Charles E. Schmidt College of Medicine",
+    "University of Nebraska Medical Center College of Medicine" = 
+      "University of Nebraska Medical Center",
+    "University of Louisville SOM" = 
+      "University of Louisville School of Medicine",
+    "University at Buffalo, Jacobs School of Medicine" = 
+      "Jacobs School Of Medicine And Biomedical Sciences",
+    "University of Oklahoma College of Medicine" = 
+      "University of Oklahoma College of Medicine Basic Sciences Education Building",
+    "UCSF" = "UCSF School of Medicine", 
+    "LSUHSC - New Orleans" = 
+      "Louisiana State University Health Sciences Center New Orleans",
+    "University of New England College of Osteopathic Medicine" = 
+      "University of New England - Biddeford Campus", 
+    "Marshall University Joan C. Edwards School Of Medicine" = 
+      "Marshall University Joan C. Edwards School of Medicine"
+  )
+
+
+access_token <- 
+  "pk.eyJ1IjoidGtleWVzMTIiLCJhIjoiY2s3Z3ExaHN4MDI5MDNscTdwZGV5bjFxeiJ9.AzYinG1evgd6aQif45NcyQ"
+
+username <- "tkeyes12"
+
+style_url_chapter_map <- "mapbox://styles/tkeyes12/ck8e0mb48299d1in0n1nzm74b"
+
+
+```
+
+
+```{r}
+## Read in chapter data
+
+a_md <-
+  additional_metadata_path %>% 
+  read_xlsx()
+
+md <- 
+  metadata_path %>% 
+  read_xlsx(sheet = "Accepted Chapters Quick Overvie") %>% 
+  filter(Chapter != "0") %>% 
+  left_join(a_md, by = c("Chapter" = "medical_school")) %>% 
+  transmute(
+    medical_school = recode(Chapter, !!! recode_vars), 
+    chapter_name = 
+      `Chapter Name` %>% 
+      na_if("N/A") %>% 
+      na_if("0") %>% 
+      replace_na(replace = "this chapter of MSPA"),
+    region, 
+    link
+  ) 
+  
+chapter_data <- 
+  geo_path %>% 
+  sf::read_sf() %>% 
+  transmute(
+    medical_school = Name, 
+    geometry
+  ) %>% 
+  left_join(md, by = "medical_school")
+
+chapter_data$region[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
+  "region 2"
+
+chapter_data$link[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
+  "http://njms.rutgers.edu/education/odace/lgbt/out.cfm"
+
+chapter_data$chapter_name[chapter_data$medical_school == "Rutgers New Jersey Medical School"] <- 
+  "Out@NJMS"
+```
+
+
+
+
+```{r}
+## Save data
+
+### Save data as .rds file
+chapter_data %>% 
+  write_rds(path = rds_path)
+```
+
+
+```{r}
+### save data as .geojson file. 
+
+chapter_data %>% 
+    sf::write_sf(dsn = json_path, delete_dsn = TRUE)
+```
+
+## Create interactive map
+
+```{r}
+final_map <- 
+  leaflet(height = 500, width = 750) %>%
+  addMapboxGL(
+    accessToken = access_token,
+    style = style_url_chapter_map
+  ) %>%
+  addCircleMarkers(
+    radius = 10,
+    opacity = 0,
+    fillOpacity = 0,
+    label = 
+      chapter_data$medical_school %>% 
+      str_wrap(width = 20), 
+    labelOptions = labelOptions(textsize = "15px"), 
+    data = chapter_data, 
+    popup = 
+      str_glue(
+        '<strong>Chapter Name:</strong> {chapter_name} <br> <strong>Chapter Region:</strong> {chapter_region} <br> Member of MSPA since {chapter_year} <br><a href="{link}">Learn more about {chapter_name}</a>', 
+        link = chapter_data$link, 
+        chapter_name = chapter_data$chapter_name, 
+        chapter_region = chapter_data$region %>% str_extract("[:digit:]"), 
+        chapter_year = 
+          sample(
+            x = c(2018:2020), 
+            size = length(chapter_data$region), 
+            replace = TRUE
+          )
+      ) 
+  )
+
+final_map
+
+saveWidget(final_map, file = here::here("reports", "final_map.html"))
+```
+

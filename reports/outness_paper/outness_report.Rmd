@@ -2,6 +2,7 @@
 title: "Outness report"
 author: "Timothy Keyes"
 date: "`r Sys.Date()`"
+always_allow_html: true
 output: 
   html_document: 
     toc: true
@@ -13,22 +14,24 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, dpi = 300)
 ```
 
+
+First, I'll load the libraries I want and set up a few parameters that will make data cleaning easier in later steps. 
+
 ```{r message=FALSE, warning=FALSE}
 # Libraries
 library(tidyverse)
-library(lubridate)
-library(waffle)
 library(kableExtra)
 library(ggthemes)
 library(ggalluvial)
+library(broom)
+library(patchwork)
+library(latex2exp)
+library(DescTools)
 
 # Parameters
 input_path <- here::here("data", "mspa_na_data.rds")
 metadata_path <- here::here("data-raw", "school_metadata.csv")
 figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
-
-total_md <- 153
-total_do <- 36
 
 likert_colors <- c("darkgreen","green","orange","red","darkred")
 
@@ -50,18 +53,53 @@ interest_labels <-
     "Very interested"
   )
 
-my_theme <- 
-  theme(
-    axis.text.y = element_text(size = 9),
-    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
-    axis.title.y = element_text(size = 12, face = "bold"), 
-    axis.title.x = element_text(size = 12, face = "bold")
-  ) 
+recode_values <- 
+  c(
+    "gender_woman" = "Cisgender Woman", 
+    "gender_man" = "Cisgender Man", 
+    "gender_genderqueer" = "Genderqueer/Gender non-conforming", 
+    "gender_gender-expansive" = "Gender-expansive", 
+    "gender_transman" = "Transgender Man", 
+    "gender_agender" = "Agender", 
+    "gender_another" = "Another Gender Identity", 
+    "gender_transwoman" = "Transgender Woman",
+    "so_heterosexual" = "Straight/Heterosexual", 
+    "so_gay" = "Gay", 
+    "so_bisexual" = "Bisexual", 
+    "so_queer" = "Queer", 
+    "so_pansexual" = "Pansexual", 
+    "so_lesbian" = "Lesbian", 
+    "so_questioning" = "Questioning", 
+    "so_asexual" = "Asexual",
+    "so_another" = "Another Sexual Orientation", 
+    "race_white" = "White/Caucasian", 
+    "race_asian" = "Asian", 
+    "race_hispanic" = "Latino or Hispanic",
+    "race_black" = "Black or African American", 
+    "race_another" = "Another Race", 
+    "race_native" = "American Indian or Alaska Native", 
+    "race_pi" = "Native Hawaiian or Other Pacific Islander"
+  )
+
+context_recode <- 
+  c(
+    "classmates_peers" = "To peers", 
+    "labmates_coworkers_team" = "To lab-mates or team members", 
+    "mentors" = "To mentors", 
+    "medical_school_app" = "On application to medical school", 
+    "residency_app" = "On application to residency/post-doctoral studies"
+  )
 
 mspa_hex <- "#666699"
 
-#===============================================================================
+```
 
+Then, I'll read in the data (which has already been cleaned a bit in previous scripts). The data are structured as follows: 
+
+* `na_data`: All data from the MSPA needs assessment. Each row represents one student; each column represents that student's responses to each of the questions that we asked in our survey.
+* `metadata`: Metadata about each school in `na_data`. Each row represents a school; each column represents information about the school (i.e. does it grant MD or DO degrees? Which state is the school located in?).
+
+```{r}
 # read in data
 na_data <- 
   input_path %>% 
@@ -70,8 +108,10 @@ na_data <-
 metadata <- 
   metadata_path %>% 
   read_csv() %>% 
-  drop_na()
+  drop_na() %>% 
+  janitor::clean_names()
 ```
+
 
 ## Data quality and cleaning
 
@@ -86,7 +126,7 @@ na_data <-
   drop_na(school_attend)
 ```
 
-And then we can filter out some variables that we don't need.
+And then we can select out some variables that we don't need. 
 
 ```{r}
 na_data <- 
@@ -94,36 +134,70 @@ na_data <-
   select(-survey_id, -consent, -complete)
 ```
 
-And create a few variables that we'll need later: 
+We can then create a few variables that we'll use later: 
 
 ```{r}
 na_data <- 
   na_data %>% 
   mutate(
+    # create a variable representing sex assigned at birth
     sex = 
       case_when(
         sab_is_male == "yes"   ~ "male", 
         sab_is_female == "yes" ~ "female", 
         TRUE                   ~ NA_character_
       ), 
-    is_urm = if_else(race_white == "yes", "no", "yes"), 
-    is_gm = 
+    # create a variable representing if the student meets the AAMC definition of URM
+    is_urm = 
       case_when(
-        gender_agender == "yes" ~ "yes", 
+        race_black  == "yes"      ~ "yes", 
+        race_native  == "yes"     ~ "yes", 
+        race_hispanic  == "yes"   ~ "yes",
+        TRUE                      ~ "no"
+      ),   
+    # create a variable representing if the student is a gender minority (not cisgender)
+    `gender_gender-expansive` = 
+      case_when(
+        gender_agender == "yes"     ~ "yes", 
         gender_genderqueer == "yes" ~ "yes", 
-        gender_transman == "yes" ~ "yes", 
-        gender_transwoman == "yes" ~ "yes", 
-        gender_another == "yes" ~ "yes", 
+        gender_transman == "yes"    ~ "yes", 
+        gender_transwoman == "yes"  ~ "yes", 
+        gender_another == "yes"     ~ "yes", 
         TRUE ~ "no"
-      )
+      ), 
+    gender_man = 
+      if_else(gender_man == "yes" & `gender_gender-expansive` == "no", "yes", "no"), 
+    gender_woman = 
+      if_else(gender_woman == "yes" & `gender_gender-expansive` == "no", "yes", "no")
   ) %>% 
+  # rename(
+  #   `gender_cisgender man` = gender_man,
+  #   `gender_cisgender woman` = gender_woman
+  # ) %>% 
+  # join in metadata for each student
   left_join(metadata, by = c("school_attend" = "name")) %>% 
-  mutate(degree_type = factor(Degree, levels = c("MD", "DO"))) %>% 
+  # some minor adjustments to variables that we'll use a lot 
+  mutate(
+    degree_type = factor(degree, levels = c("MD", "DO")), 
+    med_school_year = str_remove(med_school_year, pattern = "\\(.+\\)")
+  ) %>% 
+  select(-degree) %>% 
   drop_na(degree_type)
 
-na_data
 ```
 
+
+After all of our preprocessing, we get a dataframe that looks like this:
+
+```{r}
+na_data %>% 
+  glimpse()
+```
+
+
+In our analyses here, we'll actually ignore most of these variables and focus on just a couple. Specifically, we're interested in analyzing LGBTQ+ medical students' patterns of "outness" - or disclosing their membership to the LGBTQ+ community - in different contexts during medical school. We'll be looking at this data overall and as a function of several demographic variables like race, gender, sexual orientation, etc. 
+
+As a side note, all of this data was derived from a survey conducted by the [Medical Student Pride Alliance (MSPA)](https://www.medpride.org/), a nonprofit organization that works with medical students who identify as LGBTQ+. 
 
 ## Univariate Demographics report
 
@@ -137,13 +211,13 @@ The first section of the survey asked questions about respondents' demographic i
 * Their race/ethnicity (variables that start with `race_`)
 * If they attend an MD or a DO program (`degree_type`)
 
+Note that working with the columns starting with `gender_`, `so_`, and `race_` is a little tricky because none of the categories is mutually-exclusive (someone can identify as both "gay" and "lesbian", for instance). So, even though we can describe variables encoding gender, sexual orientation, and race as categorical, we have to be careful when we compare them (it's not as easy as just setting up a single factor variable for gender, sexual orientation, and race!).  
 
-
-Below, we calculate the breakdown of our survey respondents by each of these demographics.
+Below, we look into the breakdown of our survey respondents by each of these demographics.
 
 ### What school do you attend?
 
-Schools are arranged in order of decreasing number of responses. 
+We can count the number of students who responded from each medical school represented in the dataset. Schools are arranged in order of decreasing number of responses. 
 
 ```{r}
 na_data %>%
@@ -158,21 +232,30 @@ na_data %>%
   knitr::kable()
 ```
 
-And just to explicitly show the overall N after filtering: 
-
-```{r}
-na_data %>% 
-  count(name = "n_overall")
-```
-
+From this, we can see that we're working with a "convenience sample" - it looks like the survey was distributed to pretty much whoever MSPA could reach, with some schools responding quite a bit more than others. So, our observations here are potentially interesting, but we should consider this study (even with an N > 1000) to be on the exploratory side. 
 
 ### All other demographic variables
+
+Now, we can summarize all of our other demographic variables as a table, including...
+
+* Gender
+* Sexual Orientation
+* Race/Ethnicity
+* Year in training (pre-clinical, clinical, etc.)
+
+My strategy for this will be to make a giant table using the `{KableExtra}` package, breaking up each of the variables above by MD vs. DO. 
+
+
+First, I have to create a data structure that summarizes each demographic variable by degree type. This can be done in 3 parts. 
+
+Part 1 is computing the total number of students (as well as the MD vs. DO breakdown) in the overall sample, which I save in the tibble `demo_overall`
 
 ```{r}
 demo_overall <- 
   na_data %>% 
   count(degree_type, name = "count") %>% 
   mutate(percentage = (count / sum(count) * 100) %>% round(1)) %>% 
+  # bind the MD vs. DO summaries with rows that summarize the non-broken-up values
   bind_rows(
     na_data %>% 
       count(name = "count") %>% 
@@ -192,6 +275,11 @@ demo_overall <-
   ) %>% 
   mutate(variable = "Overall")
 
+```
+
+Step 2 is summarizing how many MD and DO students of different sexual orientations, genders, and races there are in the data set. I save these values in `demo_breakdown`.
+
+```{r}
 demo_breakdown <- 
   na_data %>% 
   group_by(degree_type) %>% 
@@ -243,7 +331,12 @@ demo_breakdown <-
         degree_type = "Full Sample"
       )
   )
+```
 
+
+Third, I can summarize how many MD vs. DO students are in each stage of their degree (pre-clinical vs. clinical. vs. research), which I'll save in `demo_year`. 
+
+```{r}
 demo_year <- 
   na_data %>% 
   group_by(degree_type) %>% 
@@ -269,6 +362,11 @@ demo_year <-
     percentage
   )
 
+```
+
+Finally, we can combine the 2 tibbles above and make our table using `kable()` with some styling options. Note that in the following table, all percentages are reported as the percentage of the **total** sample (all respondents). Categories in the same heading should not add up to 100% due to the overlapping nature of a lot of the terminology we're using here. 
+
+```{r}
 demo_combined <- 
   bind_rows(demo_breakdown, demo_year) %>% 
   pivot_longer(
@@ -291,38 +389,6 @@ demo_combined <-
   arrange(variable_type, desc(MD_count)) %>% 
   select(-variable_type)
 
-```
-
-Here we actually make the table...
-
-```{r}
-recode_values <- 
-  c(
-    "gender_woman" = "Woman", 
-    "gender_man" = "Man", 
-    "gender_genderqueer" = "Genderqueer/Gender non-conforming", 
-    "gender_transman" = "Transgender Man", 
-    "gender_agender" = "Agender", 
-    "gender_another" = "Another Gender Identity", 
-    "gender_transwoman" = "Transgender Woman",
-    "so_heterosexual" = "Straight/Heterosexual", 
-    "so_gay" = "Gay", 
-    "so_bisexual" = "Bisexual", 
-    "so_queer" = "Queer", 
-    "so_pansexual" = "Pansexual", 
-    "so_lesbian" = "Lesbian", 
-    "so_questioning" = "Questioning", 
-    "so_asexual" = "Asexual",
-    "so_another" = "Another Sexual Orientation", 
-    "race_white" = "White/Caucasian", 
-    "race_asian" = "Asian", 
-    "race_hispanic" = "Latino or Hispanic",
-    "race_black" = "Black or African American", 
-    "race_another" = "Another Race", 
-    "race_native" = "American Indian or Alaska Native", 
-    "race_pi" = "Native Hawaiian or Other Pacific Islander"
-  )
-
 demo_overall %>% 
   bind_rows(demo_combined) %>%
   transmute(
@@ -337,41 +403,54 @@ demo_overall %>%
     full_width = F
   ) %>%
   row_spec(1, bold = T) %>% 
-  pack_rows("Gender", 2, 8, label_row_css = "background-color: #666; color: #fff;") %>%
-  pack_rows("Sexual Orientation", 9, 17, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Race/Ethnicity", 18, 24, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Year in School", 25, 28, label_row_css = "background-color: #666; color: #fff;") 
+  pack_rows("Gender", 2, 9, label_row_css = "background-color: #666; color: #fff;") %>%
+  pack_rows("Sexual Orientation", 10, 18, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Race/Ethnicity", 19, 25, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;") 
 ```
 
-Outness plots
+
+
+
+## Who is "out" - some visualizations
+
+With these basics out of the way, we can plot which medical students report being comfortable being "out" at different stages of medical training!
+
+The important variables encoding the information we're interested in within `na_data` are as follows: 
+
+* Variables beginning with `out_`: These variables represent if students were "out" with regard to their sexual orientation and/or gender identity (broadly defined) in a certain "context" during medical school. These contexts are represented by the strings that come after the `out_` (for instance, `out_classmates_peers` encodes if a student reported being "out" to their classmates/peers in medical school). For all students who didn't identify as LGBTQ+, these variables are not meaningful. 
+
+* Variables beginning with `ability_out_`: These variables represent if respondents support the *ability* of LGBTQ+ students to be "out" with regard to their sexual orientation and/or gender identity in a certain "context" during medical school (if they so choose). These contexts are represented by the strings that come after the `ability_out_` as above.
+
+* Variables beginning with `protections_out_`: These variables represent if respondents support explicit *protections* for LGBTQ+ students who choose to be "out" with regard to their sexual orientation and/or gender identity in a certain "context" during medical school. These contexts are represented by the strings that come after the `protections_out_` as above.
+
+
+We can do a bit of wrangling to clean this data so that each of the variables mentioned above is in tidy format...
 
 ```{r}
-context_recode <- 
-  c(
-    "classmates_peers" = "To peers", 
-    "labmates_coworkers_team" = "To lab-mates or team members", 
-    "mentors" = "To mentors", 
-    "medical_school_app" = "On application to medical school", 
-    "residency_app" = "On application to residency/post-doctoral studies"
-  )
-
+# store the total number of students in our study for convenience
 n <- 
   na_data %>% 
   drop_na(school_attend, is_lgbtq) %>% 
   nrow()
-  
+
+# process the na_data so that we only keep information about student outness
 outness_data <- 
   na_data %>% 
   select(
     starts_with("out_"), 
     starts_with("ability_out_"), 
     starts_with("protections_out"), 
-    sex, 
+    starts_with("race"), 
+    starts_with("gender"), 
+    starts_with("so"),
     is_urm, 
-    is_gm, 
-    school_attend, 
+    `gender_gender-expansive`,
+    school_attend,
     is_lgbtq
   ) %>% 
+  # eliminate free-response columns for participants who 
+  # selected "another" for race, gender, sexual orientation
   select(
     -contains("explanation"), 
     -contains("other")
@@ -396,14 +475,19 @@ outness_data <-
         "ability_o" = "Support ability to be out", 
         "protections_o" = "Support protections for outness"
       ), 
-    context = 
-      recode(
-        context, 
-        !!! context_recode
-      ) 
+    context = recode(context, !!!context_recode) 
   )
 
-outness_data %>% 
+outness_data
+```
+
+### All of our data in one plot
+
+One strategy for summarizing this data would be to plot the percentage of medical students who identify as LGBTQ+ vs. non-LGBTQ+ who are out/support being out as a simple faceted bar graph. It'll work as a first quick-and-dirty approach...
+
+```{r}
+outness_altogether_plot <- 
+  outness_data %>% 
   group_by(is_lgbtq, variable, context) %>% 
   summarize(prop = sum(is_out == "yes") / n()) %>% 
   mutate(context = fct_reorder(context, desc(prop))) %>% 
@@ -412,19 +496,19 @@ outness_data %>%
   geom_text(
     aes(label = (prop * 100) %>% round(0)), 
     vjust = -0.2, 
-    size = 4, 
+    size = 3, 
     position = position_dodge(width = 0.9), 
     fontface = "bold"
   ) + 
   facet_wrap(vars(variable), ncol = 3) + 
-  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1), limits = c(NA, 1.05)) + 
   scale_fill_manual(
     breaks = c("LGBTQ+", "Non-LGBTQ+"), 
     values = c(mspa_hex, "gray60") 
   ) + 
   theme(
-    legend.position = "bottom", 
-    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    legend.position = "top", 
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
     ) + 
   labs(
     x = NULL, 
@@ -432,87 +516,244 @@ outness_data %>%
     fill = NULL, 
     caption = str_glue("N = {n}")
   )
+
+outness_altogether_plot 
+
+
 ```
 
-Alter `na_data` to include a variable that we will use later
+This plot is okay, but it's a little busy, and it doesn't make a super economical use of space. That being said, it does show some interesting trends in the data, including the following:
+
+* Leftmost panel: LGBTQ+ students are most likely to report being out in casual, non-evaluative contexts. As contexts become more professional (i.e. the application to residency) and evaluative, students are less likely to be "out." 
+* Middle panel: In general, the majority of LGBTQ+ students and non-LGBTQ+ students alike support their fellow medical students' right to be "out" with regard to their sexual orientation and/or sexual identity (although this seems slightly lower in applications to medical school and residency).
+* Rightmost panel: A similar point to that above. 
+
+
+### Outness overall
+
+Because there's a conceptual relationship between each of the contexts in which students reported bring out or not, we can try using a line-graph to show the change across the different contexts. For instance, we can look at how LGBTQ+ medical student outness changes across more informal contexts (like among peers) compared to applications to medical school or residency, which are more professional/evaluative. 
+
+To do so, first we compute the degree of outness among LGBTQ+ med students in different contexts. 
+
 ```{r}
-na_data <- 
-  na_data %>% 
+# compute outness of all lgbtq+ medical students across med school environments
+overall_outness_data <- 
+  outness_data %>% 
+  filter(is_lgbtq == "LGBTQ+", str_detect(variable, "or plan to be out")) %>% 
+  group_by(variable, context) %>%
+  summarize(
+    total = sum(is_out == "yes"), 
+    prop = total / n()
+  ) %>%
   mutate(
-    gender_expansive = 
-      if_else(
-          gender_genderqueer == "yes" | 
-          gender_agender == "yes" | 
-          gender_transman == "yes" | 
-          gender_transwoman == "yes" | 
-          gender_another == "yes",
-        "yes", 
-        "no"
-      ), 
-    gender_nonexpansive = 
-      if_else(
-        gender_expansive == "no", 
-        "yes", 
-        "no"
-      )
+    environment = fct_reorder(context, desc(prop)), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall"
   )
 ```
 
 
-```{r}
-so_vars <- 
-  colnames(na_data)[
-    setdiff(
-      starts_with(match = "so_", vars = colnames(na_data)), 
-      c(
-        ends_with(match = "_description", vars = colnames(na_data)), 
-        ends_with(match = "_explanation", vars = colnames(na_data))
-      )
-    )
-  ]
+In addition, we can perform some basic NHST using [Cochran's Q test](https://en.wikipedia.org/wiki/Cochran%27s_Q_test) to see if there are differences across contexts overall. We can then follow-up on where the specific differences are using [McNemar's test](https://en.wikipedia.org/wiki/McNemar%27s_test) for paired nominal data. In particular, we're interested in how "outness" decreases when students consider applying to residency, 
 
+```{r}
+# Perform Cochran's Q omnibus test 
+q_test <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  select(starts_with("out_")) %>% 
+  select(-contains("out_other")) %>% 
+  table() %>% 
+  as.data.frame() %>% 
+  as.matrix() %>% 
+  CochranQTest() %>% 
+  tidy()
+
+q <- 
+  q_test$statistic %>% 
+  round(1)
+
+p_value <- 
+  q_test$p.value 
+
+p_value <- 
+  if_else(p_value < 0.001, formatC(p_value, format = "e", digits = 2), as.character(round(p_value, 2)))
+
+df <- q_test$parameter
+
+# follow up with smaller McNemar's tests for each pair of contexts
+
+my_columns <-
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  select(starts_with("out_")) %>% 
+  select(-contains("out_other"), -contains("residency")) %>% 
+  colnames()
+
+# write a function that will compare each context with residency applications
+mcnemar_test <- 
+  function(test_column) { 
+    na_data %>% 
+      filter(is_lgbtq == "LGBTQ+") %>% 
+      select(all_of(c(test_column, "out_residency_app"))) %>% 
+      select(-contains("out_other")) %>% 
+      table() %>% 
+      mcnemar.test() %>% 
+      tidy()
+  }
+
+mcnemar_tests <- 
+  tibble(tested_column = my_columns) %>% 
+  mutate(
+    test_results = map(.x = my_columns, .f = mcnemar_test), 
+    chi_squared = 
+      map_dbl(test_results, ~ pull(.x, statistic)) %>% 
+      round(1), 
+    p_value = 
+      map_dbl(test_results, ~ pull(.x, p.value)) %>% 
+      formatC(format = "e", digits = 2), 
+    df = map_dbl(test_results, ~ pull(.x, parameter))
+  )
+
+mcnemar_tests
+
+```
+
+Now that we've calculated our statistics, we can make a line plot summarizing how "out" students are, which will show how student's degree of outness (or projected outness) decreases in more professional contexts. 
+
+```{r}
+
+overall_outness_plot <- 
+  overall_outness_data %>% 
+  mutate(
+    significant = if_else(str_detect(environment, "residency"), "", "*")
+  ) %>% 
+  ggplot(aes(x = environment, y = percent_out)) + 
+  geom_line(
+    mapping = aes(group = 1), 
+    color = "black",
+    size = 1
+  ) +
+  geom_point(
+    fill = "gray50", 
+    shape = 21,
+    size = 3.5, 
+    stroke = 1
+  ) + 
+  geom_text(
+    aes(label = str_c(percent_out, "%")), 
+    nudge_y = 7.5, 
+    nudge_x = 0.08
+  ) + 
+  geom_text(
+    aes(label = significant), 
+    nudge_y = 12, 
+    size = 6
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    limits = c(15, 105), 
+    labels = scales::label_percent(accuracy = 1, scale = 1)
+  ) +   
+  theme_bw() + 
+  theme(axis.text.x = element_text(size = 10, angle = 30, hjust = 1)) + 
+  labs(
+    subtitle = "LGBTQ+ student \'outness\' across different contexts in medical school", 
+    x = NULL, 
+    y = "Percentage of \'out\' students", 
+    fill = NULL, 
+    color = NULL, 
+    caption = bquote("Q"[.(df)] ~ "=" ~ .(q) ~ "; " ~ "p =" ~ .(p_value))
+  )
+
+overall_outness_plot
+
+overall_outness_plot %>% 
+  ggsave(
+    filename = "overall_outness_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+# save for later, so that other plots can use the same ordering
+environment_levels <- 
+  levels(overall_outness_data$environment)
+
+```
+
+
+
+### A bit more wrangling
+
+At this point, we want to delve into some subgroup analyses (looking at medical student outness across various demographic parameters). This is a bit tricky in our dataset, as some of our demographic characteristics are non-overlapping (and thus can be representing with a single `factor` column) whereas other demographic characteristics are overlapping (like gender), which means they're best represented using multiple indicator variables. 
+
+To help deal with these different kinds of features, we write a function `tally_outness` that counts how many students who identify as a particular non-mutually exclusive demographic identifier are "out" in various contexts during medical school. Pretty much everything else can be done with `{dplyr}`.
+
+```{r}
+# Input: my_identity = the name of a column representing a discrete identity in na_data
+#
+# Output: a tibble containing information about what percentage of students who identify as  
+#         my_identity are out in different med school contexts. In this tibble, 
+#         each row represents a context (can be unnested to combine all identities)
+tally_outness <- 
+  function(my_identity) {
+    na_data %>% 
+      filter(is_lgbtq == "LGBTQ+") %>% 
+      filter(!! sym(my_identity) == "yes") %>% 
+      select(starts_with("out_")) %>%
+      select(-ends_with("_explanation"), -ends_with("_other")) %>% 
+      summarize_all(function(x) sum(x == "yes")) %>% # / length(x) * 100) %>% 
+      pivot_longer(
+        cols = everything(), 
+        names_to = "environment", 
+        values_to = "number_out", 
+        names_prefix = "out_"
+      ) %>% 
+      mutate(
+        percent_out = number_out / sum(na_data[my_identity] == "yes", na.rm = TRUE)
+      )
+  }
+```
+
+
+Using this function, we can create two data structures that we will need in our plotting: 
+
+* `outness_subgroup` = a nested tibble containing the percent of "out" students in each demographic group in each med school context..
+* `demographics_n` = a nested tibble containing the total number of students in each demographic group, which we will use in the plot labels to indicate our group-specific N's. 
+
+```{r}
+# find all the column names in na_data that refer to demographic identifiers
 demographic_vars <- 
   c("so_", "gender_", "race_") %>% 
   map(
     ~ setdiff(
       starts_with(match = ., vars = colnames(na_data)), 
-      ends_with(match = "_description", vars = colnames(na_data))
+      ends_with(match = c("_description", "_explanation"), vars = colnames(na_data))
     )
   ) %>% 
   unlist() %>% 
   colnames(na_data)[.]
-      
 
-tally_outness <- function(my_var) {
+# calculate total number of people in each mutually-exclusive demographic subgroup 
+degree_n <- 
   na_data %>% 
-    filter(is_lgbtq == "LGBTQ+") %>% 
-    filter(!! sym(my_var) == "yes") %>% 
-    select(starts_with("out_")) %>%
-    select(-ends_with("_explanation"), -ends_with("_other")) %>% 
-    summarize_all(
-      #list(
-        #count = function(x) sum(x == "yes"),
-        #percentage = 
-      function(x) sum(x == "yes") / length(x) * 100
-      #)
-    ) %>% 
-    pivot_longer(
-      cols = everything(), 
-      names_to = "environment", 
-      values_to = "percent_out", 
-      names_prefix = "out_"
-    )
-}
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(degree_type) %>% 
+  nest() %>% 
+  mutate(var_type = "degree")
 
-outness_subgroup <- 
-  tibble(identity = demographic_vars) %>% 
-  mutate(
-    data = map(identity, .f = tally_outness)
-  ) %>% 
-  unnest() %>% 
-  separate(col = identity, into = c("var_type", "identity"), sep = "_")
+year_n <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(med_school_year) %>% 
+  drop_na() %>% 
+  nest() %>% 
+  mutate(var_type = "year")
 
-# calculate total number of people in each demographic subgroup
+# calculate total number of people in each non-mutually-exclusive demographic subgroup for use in labels
 demographics_n <- 
   na_data %>% 
   filter(is_lgbtq == "LGBTQ+") %>% 
@@ -520,107 +761,329 @@ demographics_n <-
     .vars = vars(starts_with("so_"), starts_with("gender_"), starts_with("race")), 
     ~ sum(. == "yes")
   ) %>% 
-  select(-contains("another")) %>% 
+  select(-contains("explanation"), -contains("description")) %>% 
   pivot_longer(
     cols = everything(), 
     names_to = "identity", 
     values_to = "n", 
   ) %>% 
-  separate(col = identity, into = c("var_type", "identity"))
-
-demographics_n
-
-```
-
-
-
-```{r}
-so_labels <- 
-  function(label) {
-    new_label <-
-      str_glue(
-        "{title} (n = {number})", 
-        title = str_to_title(label), 
-        number = 
-          demographics_n %>% 
-          filter(identity %in% label) %>% 
-          pull(n)
-      )
-    new_label
-  }
-
-overall_outness_data <- 
-  outness_data %>% 
-  filter(is_lgbtq == "LGBTQ+") %>% 
-  group_by(variable, context) %>%
-  summarize(prop = sum(is_out == "yes") / n()) %>%
+  separate(col = identity, into = c("var_type", "identity"), sep = "_") %>% 
+  group_by(var_type) %>% 
+  nest() %>% 
+  ungroup() %>% 
   mutate(
-    environment = fct_reorder(context, desc(prop)), 
-    percent_out = (prop * 100) %>% round(1), 
-    identity = "overall"
+    data = 
+      map(
+        .x = data, 
+        .f = ~ 
+          .x %>% 
+          mutate(
+            identity = 
+              fct_lump(identity, prop = 0.05, w = n, other_level = "another") %>% 
+              as.character()
+          ) %>% 
+          count(identity, wt = n)
+      )
   )
 
-overall_outness_data
-  
 
-# SO plot
-so_plot_frame <- 
-  outness_subgroup %>% 
-  filter(
-    var_type == "so", 
-    !(identity %in% c("heterosexual", "questioning", "asexual", "another"))
+### calculate the number of "out" students across contexts broken down by 
+### each mutually-exclusive demographic feature.
+
+# degree type (MD vs. DO)
+degree_subgroup <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  group_by(degree_type) %>% 
+  select(starts_with("out_")) %>%
+  select(-ends_with("_explanation"), -ends_with("_other")) %>% 
+  summarize_all(function(x) sum(x == "yes")) %>% 
+  pivot_longer(
+    cols = -degree_type, 
+    names_to = "environment", 
+    values_to = "number_out", 
+    names_prefix = "out_"
   ) %>% 
   mutate(
     environment = 
-      recode(environment, !!! context_recode) %>% 
-      fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
-    identity = fct_reorder2(identity, environment, percent_out)
+      recode(environment, !!!context_recode)
+  ) %>% 
+  left_join(
+    degree_n$data %>% 
+      pluck(1)
+  ) %>% 
+  mutate(
+    identity = degree_type,
+    percent_out = number_out / n * 100
+  ) %>% 
+  nest() %>% 
+  mutate(var_type = "degree")
+
+# year of training
+year_subgroup <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  group_by(med_school_year) %>% 
+  select(starts_with("out_")) %>%
+  select(-ends_with("_explanation"), -ends_with("_other")) %>% 
+  summarize_all(function(x) sum(x == "yes")) %>% 
+  pivot_longer(
+    cols = -med_school_year, 
+    names_to = "environment", 
+    values_to = "number_out", 
+    names_prefix = "out_"
+  ) %>% 
+  mutate(
+    environment = 
+      recode(environment, !!!context_recode)
+  ) %>% 
+  left_join(
+    year_n$data %>% 
+      pluck(1)
+  ) %>% 
+  mutate(
+    percent_out = number_out / n * 100, 
+    identity = med_school_year
+  ) %>% 
+  drop_na() %>% 
+  nest() %>% 
+  mutate(var_type = "year")
+
+
+### calculate the number of "out" students across contexts broken down by 
+### each non-mutually-exclusive demographic feature.
+
+outness_subgroup <- 
+  tibble(identity = demographic_vars) %>% 
+  mutate(
+    data = map(identity, .f = tally_outness)
+  ) %>% 
+  unnest() %>% 
+  separate(col = identity, into = c("var_type", "identity"), sep = "_") %>% 
+  group_by(var_type) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(
+    data = 
+      map2(
+        .x = demographics_n$data, 
+        .y = data, 
+        .f = ~
+          .y %>% 
+          mutate(
+            identity = 
+                   fct_other(
+                     f = identity, 
+                     keep = 
+                       .x %>% 
+                       pull(identity) %>% 
+                       unique(), 
+                     other_level = "another"
+                   )
+          ) %>% 
+          group_by(environment, identity) %>% 
+          summarize(number_out = sum(number_out), .groups = "drop") %>% 
+          left_join(.x) %>% 
+          mutate(percent_out = number_out / n * 100)
+      )
   )
+
 ```
 
+Using these pieces,, we can combine all of our wrangled data into a single nested tibble that can be used for the rest of our analyses. This nested tibble will be called `outness_subgroup`, and it will have two columns: 
+
+* `var_type`: A character column indicating which type of demographic feature the row represents (i.e sexual orientation, gender, race). 
+* `data`: A list-col in which each entry contains a tibble. These tibbles contain a row for each identity-environment pair in which students could potentially be "out". Each row also contains the number of students of each identity who reported being out in each environment as well as what percentage of students of that identity were out in each context. 
+
 ```{r}
+demographics_n <- 
+  demographics_n %>% 
+  bind_rows(degree_n) %>% 
+  bind_rows(year_n)
+
+outness_subgroup <- 
+  outness_subgroup %>% 
+  bind_rows(degree_subgroup) %>% 
+  bind_rows(year_subgroup)
+
+demographics_n$data[[2]] <- 
+  demographics_n$data[[2]] %>% 
+  mutate(identity = fct_recode(identity,  "cisgender man"  = "man", "cisgender woman" = "woman"))
+
+outness_subgroup$data[[2]] <- 
+  outness_subgroup$data[[2]] %>% 
+  mutate(identity = fct_recode(identity,  "cisgender man"  = "man", "cisgender woman" = "woman"))
+```
+
+
+
+### Outness by sexual orientation
+
+Now we can finally make our plots! 
+
+We can start with writing a generic function that can automatically plot outness across different med school contexts broken up by a single demographic variable. 
+
+```{r}
+# function for plotting outness across different demographic variables
+#
+# Inputs:
+#     - my_var_type = character vector representing what "type" of demographic 
+#       variable we are plotting, i.e. sexual orientation, gender, race, etc. 
+#     - irrelevant_levels = character vector indicating which levels of the 
+#       demographic variable should be dropped in the final plot
+#     - subtitle = character vector to be used as the subtitle of the plot 
+#
+# Output: A ggplot object 
+
+plot_outness <- 
+  function(my_var_type, irrelevant_levels, subtitle) { 
+    
+    # create the dataframe that will be used for the plotting
+    plot_frame <- 
+      outness_subgroup %>% 
+      filter(var_type == my_var_type) %>% 
+      pull(data) %>% 
+      pluck(1) %>% 
+      filter(!(identity %in% irrelevant_levels)) %>% 
+      mutate(
+        environment = 
+          recode(environment, !!! context_recode) %>% 
+          fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
+        identity = fct_reorder2(identity, environment, percent_out)
+      )
+    
+    # do some NHST for good measure and to include with the plot
+    chi_frame <- 
+      plot_frame %>% 
+      select(environment, identity, number_out) %>% 
+      pivot_wider(
+        names_from = environment, 
+        values_from = number_out
+      )
+    
+    chi_matrix <- 
+      chi_frame %>% 
+      select(-identity) %>% 
+      as.matrix()
+    
+    row.names(chi_matrix) <- chi_frame$identity
+    
+    chi_test <-
+      chi_matrix %>% 
+      as.table() %>% 
+      chisq.test() %>% 
+      tidy()
+    
+    chi <- 
+      chi_test$statistic %>% 
+      round(1) %>% 
+      as.character() 
+    
+    if (chi_test$p.value < 0.001) {
+      p_value <-
+        chi_test$p.value %>% 
+        formatC(format = "e", digits = 2)
+      
+    } else { 
+      p_value <- 
+        chi_test$p.value %>% 
+        round(2) %>% 
+        as.character()
+    }
+    
+    
+    df <- chi_test$parameter
+    
+    # create a function that will label the color and fill scales
+    label_function <- 
+      function(my_labels) {
+        my_labels <- as.character(my_labels)
+        new_label <-
+          str_glue(
+            "{title} (n = {number})", 
+            title = str_to_title(my_labels), 
+            number = 
+              plot_frame %>% 
+              distinct(identity, n) %>% 
+              mutate(identity = factor(identity, levels = my_labels)) %>%
+              arrange(identity) %>% 
+              pull(n)
+          )
+        return(new_label)
+      }
+    
+    # actually make the plot! 
+    my_plot <- 
+      ggplot() + 
+      geom_line(
+        data = plot_frame, 
+        mapping = 
+          aes(
+            x = environment, 
+            y = percent_out, 
+            color = identity, 
+            group = identity
+          ), 
+        size = 1
+      ) +
+      geom_point(
+        data = plot_frame, 
+        mapping = 
+          aes(
+            x = environment, 
+            y = percent_out, 
+            fill = identity 
+          ), 
+        shape = 21, 
+        size = 3
+      ) + 
+      scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+      scale_y_continuous(
+        limits = c(15, 105), 
+        labels = scales::label_percent(accuracy = 1, scale = 1)
+      ) +   
+      scale_fill_tableau(
+        breaks = levels(plot_frame$identity), 
+        labels = label_function
+      ) + 
+      scale_color_tableau(
+        breaks = levels(plot_frame$identity), 
+        labels = label_function
+      ) + 
+      theme_bw() + 
+      theme(
+        axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
+      ) + 
+      labs(
+        subtitle = subtitle, 
+        x = NULL, 
+        y = "Percentage of \"out\" students", 
+        fill = NULL, 
+        color = NULL, 
+        caption = bquote({chi^2} [.(df)] ~ "=" ~ .(chi) ~ "; " ~ "p =" ~ .(p_value))
+      )
+    
+    return(my_plot)
+  } 
+
+```
+
+
+With this function, we can now plot how outness differs across different sexual orientations. 
+
+```{r}
+so_irrelevant_levels <- c() 
+so_subtitle <- "LGBTQ+ student \'outness\' by sexual orientation"
+
 so_plot <- 
-  ggplot() + 
-  geom_line(
-    data = so_plot_frame, 
-    mapping = 
-      aes(
-        x = environment, 
-        y = percent_out, 
-        color = identity, 
-        group = identity
-      ), 
-    size = 1
-  ) +
-  geom_point(
-    data = so_plot_frame, 
-    mapping = 
-      aes(
-        x = environment, 
-        y = percent_out, 
-        fill = identity 
-      ), 
-    shape = 21, 
-    size = 3
-  ) + 
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
-  scale_y_continuous(
-    limits = c(15, 105), 
-    labels = scales::label_percent(accuracy = 1, scale = 1)
-  ) +   
-  scale_fill_tableau(labels = so_labels) + 
-  scale_color_tableau(labels = so_labels) + 
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
-  ) + 
-  labs(
-    subtitle = "Outness by sexual orientation", 
-    x = NULL, 
-    y = "Percentage of \"out\" students", 
-    fill = NULL, 
-    color = NULL
+  plot_outness(
+    my_var_type = "so", 
+    irrelevant_levels = so_irrelevant_levels, 
+    subtitle = so_subtitle
   )
+
+so_plot
+
 
 so_plot %>% 
   ggsave(
@@ -632,166 +1095,28 @@ so_plot %>%
     height = 5,
     units = "in"
   )
-
-so_plot
-
-```
-  
-  
-
-Note that in this plot we only show identities that are >5% of the total number of responses. 
-
-
-
-```{r}
-so_plot_gray <- 
-  ggplot() + 
-  geom_line(
-    data = so_plot_frame, 
-    mapping = 
-      aes(
-        x = environment, 
-        y = percent_out, 
-        group = identity, 
-        linetype = identity
-      ), 
-    color = "gray30",
-    size = 1
-  ) +
-  geom_point(
-    data = so_plot_frame, 
-    mapping = 
-      aes(
-        x = environment, 
-        y = percent_out, 
-        fill = identity, 
-        shape = identity
-      ), 
-    fill = "black",
-    color = "gray60",
-    size = 4
-  ) + 
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
-  scale_y_continuous(
-    limits = c(15, 105), 
-    labels = scales::label_percent(accuracy = 1, scale = 1)
-  ) + 
-  scale_shape_manual(
-    values = 21:25,
-    labels = so_labels
-  ) + 
-  scale_linetype_discrete(labels = so_labels, guide = FALSE) + 
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
-  ) + 
-  labs(
-    subtitle = "Outness by sexual orientation", 
-    x = NULL, 
-    y = "Percentage of \"out\" students", 
-    shape = NULL, 
-    linetype = NULL
-  )
-
-so_plot_gray
-
-so_plot_gray %>% 
-  ggsave(
-    filename = "so_plot_gray.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 6.5, 
-    height = 5,
-    units = "in"
-    )
 ```
 
+We can see that our $\chi^2$-test for independence (which we're using here as an omnibus test) didn't detect significant differences across sexual orientations, and this is probably because the same broad trend can be seen for most identities (most people are comfortable being "out" to their peers, but are less so in more professional contexts - particularly on applications to post-graduate training). 
 
+That being said, there are some interesting trends among subgroups - in general, it seems that people who identify as bisexual are less out in general than others, as are people who identified as a sexuality not listed. The "another" category included people who identified as heterosexual, asexual, demisexual, graysexual, polyamorous, polysexual, or didn't label their sexuality.
 
+### Outness across gender identities
 
-By gender identity...
+We can make the same kind of plot for different genders. Note that in this case, the "another" gender category includes the least-common responses 
 
 ```{r}
-gender_plot_frame <-
-  outness_subgroup %>% 
-  filter(identity %in% c("expansive", "nonexpansive")) %>% 
-  mutate(
-    environment = 
-      recode(environment, !!! context_recode) %>% 
-      factor(levels = levels(so_plot_frame$environment)), 
-    identity = 
-      identity %>% 
-      recode(expansive = "Gender-expansive/Gender-diverse", nonexpansive = "Cisgender") %>% 
-      str_wrap(width = 17) %>% 
-      fct_reorder2(environment, percent_out)
-  ) 
+gender_irrelevant_levels <- c("another", "genderqueer") 
+gender_subtitle <- "LGBTQ+ student \'outness\' by gender"
 
 gender_plot <- 
-  gender_plot_frame %>% 
-  ggplot(aes(x = environment, y = percent_out, fill = identity)) +
-  geom_line(aes(color = identity, group = identity), alpha = 0.8, size = 1) + 
-  geom_point(shape = 21, size = 3, alpha = 1) + 
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
-  scale_y_continuous(
-    limits = c(15, 105), 
-    labels = scales::label_percent(accuracy = 1, scale = 1), 
-  ) + 
-  scale_fill_tableau(
-    labels = 
-      function(x) {
-        str_glue(
-          "{x} (n = {num})", 
-          num = 
-            demographics_n %>% 
-            mutate(
-              identity = 
-                identity %>% 
-                recode(
-                  expansive = "Gender-expansive/Gender-diverse", 
-                  nonexpansive = "Cisgender"
-                ) %>% 
-                str_wrap(width = 17) 
-            ) %>% 
-            filter(identity %in% x) %>% 
-            pull(n)
-        )
-      }
-  ) + 
-  scale_color_tableau(
-    labels = 
-      function(x) {
-        str_glue(
-          "{x} (n = {num})", 
-          num = 
-            demographics_n %>% 
-            mutate(
-              identity = 
-                identity %>% 
-                recode(
-                  expansive = "Gender-expansive/Gender-diverse", 
-                  nonexpansive = "Cisgender"
-                ) %>% 
-                str_wrap(width = 17) 
-            ) %>% 
-            filter(identity %in% x) %>% 
-            pull(n)
-        )
-      }
-  ) + 
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
-  ) + 
-  labs(
-    subtitle = "Outness by gender identity", 
-    x = NULL, 
-    y = "Percentage of \"out\" students", 
-    fill = NULL, 
-    color = NULL
-  ) 
+  plot_outness(
+    my_var_type = "gender", 
+    irrelevant_levels = gender_irrelevant_levels, 
+    subtitle = gender_subtitle
+  )
 
-gender_plot
+gender_plot 
 
 gender_plot %>% 
   ggsave(
@@ -806,64 +1131,85 @@ gender_plot %>%
   
 ```
 
+In this case, note that the "Gender-Expansive" category includes transgender men, transgender women, agender people, and genderqueer/gender-nonconforming/nonbinary people. They are grouped together because each of these categories on their own had a relatively small number of respondents.
+
+In this case, the overall $\chi^2$-test was just barely significant at the level of $\alpha = 0.05$. We can use follow-up chi-squared tests to see which gender categories differ from one another. 
 
 ```{r}
-gender_labels <- 
-  function(x) {
-    str_glue(
-      "{x} (n = {num})", 
-      num = 
-        demographics_n %>% 
-        mutate(
-          identity = 
-            identity %>% 
-            recode(
-              expansive = "Gender-expansive/Gender-diverse", 
-              nonexpansive = "Cisgender"
-            ) %>% 
-            str_wrap(width = 17) 
-        ) %>% 
-        filter(identity %in% x) %>% 
-        pull(n)
-    )
-  }
+gender_outness <- 
+  outness_subgroup %>% 
+  filter(var_type == "gender") %>% 
+  pull(data) %>% 
+  pluck(1) %>%
+  filter(identity %in% c("gender-expansive", "cisgender woman", "cisgender man")) %>% 
+  mutate(number_in = n - number_out)
 
-gender_plot_gray <- 
-  gender_plot_frame %>% 
-  ggplot(aes(x = environment, y = percent_out)) +
-  geom_line(aes(color = identity, group = identity), alpha = 0.8, size = 1) + 
-  geom_point(
-    aes(fill = identity), 
-    color = "black", 
-    shape = 21, 
-    size = 3, 
-    alpha = 1
-  ) + 
-  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
-  scale_y_continuous(
-    limits = c(15, 105), 
-    labels = scales::label_percent(accuracy = 1, scale = 1)
-  ) + 
-  scale_shape_manual(values = 21:22, labels = gender_labels) + 
-  scale_color_manual(values = c("black", "gray"), labels = gender_labels) + 
-  scale_fill_manual(values = c("black", "gray"), labels = gender_labels) + 
-  theme_bw() + 
-  theme(
-    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
-  ) + 
-  labs(
-    subtitle = "Outness by gender identity", 
-    x = NULL, 
-    y = "Percentage of \"out\" students", 
-    fill = NULL, 
-    color = NULL
-  ) 
+gender_outness %>% 
+  group_by(environment) %>% 
+  select(-n, -percent_out, - identity) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(
+    matrix = map(data, as.matrix), 
+    prop_test = map(matrix, ~tidy(prop.test(.x)))
+  ) %>% 
+  unnest(prop_test) %>% 
+  select(
+    -contains("estimate"), 
+    -data, 
+    -matrix,
+    -method, 
+    -alternative,
+    chi_squared = statistic, 
+    p_value = p.value, 
+    df = parameter
+  ) %>% 
+  # Bonferroni correction for multiple comparisons and rounding for aesthetics
+  mutate(
+    chi_squared = round(chi_squared, 2),
+    p_value = 
+      pmin(1, p_value * n()) %>% 
+      round(3)
+  )
 
-gender_plot_gray
+```
 
-gender_plot_gray %>% 
+
+Thus, we can see that the differences between the different gender categories proportions of "outness" are significant in every context other than among classmates/peers. From the plot, we can see that this is obviously driven by the fact that cisgender women tend to be less "out" than either cisgender men or gender-expansive people. 
+
+We can use this information to go back to our `gender_plot` and add asterisks. 
+
+```{r}
+label_frame <- 
+  outness_subgroup %>% 
+  filter(var_type == "gender") %>% 
+  pull(data) %>% 
+  pluck(1) %>% 
+  filter(identity == "cisgender woman") %>% 
+  mutate(
+    environment = 
+      recode(environment, !!! context_recode) %>% 
+      fct_reorder(percent_out, .fun = mean, .desc = TRUE), 
+    identity = fct_reorder2(identity, environment, percent_out), 
+    significance = if_else(str_detect(environment, "peers"), "", "*")
+  )
+
+label_frame
+
+gender_plot <- 
+  gender_plot + 
+  geom_text(
+    data = label_frame, 
+    aes(x = environment, y = percent_out, label = significance), 
+    size = 8, 
+    nudge_y = -7.5
+  )
+
+gender_plot
+
+gender_plot %>% 
   ggsave(
-    filename = "gender_plot_gray.pdf", 
+    filename = "gender_plot.pdf", 
     plot = ., 
     device = "pdf", 
     path = figure_out_path, 
@@ -871,14 +1217,180 @@ gender_plot_gray %>%
     height = 5,
     units = "in"
   )
-
-
 ```
 
 
-Support for outness plots: 
+### Outness by Race/ethnicity
 
-```{r, dpi = 300}
+We can make a similar plot using the racial/ethnic identifiers that each student identified with
+
+```{r}
+race_plot <- 
+  plot_outness(
+    my_var_type = "race", 
+    irrelevant_levels = c("another"), 
+    subtitle = "LGBTQ+ student \'outness\' by Race/Ethnicity"
+  )
+
+race_plot
+
+race_plot %>% 
+  ggsave(
+    filename = "race_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+  
+```
+
+In this case, our omnibus test did not detect significant differences overall between racial/ethnic groups, although there does seem to be a slight trend in that White and Asian students seem slightly less likely to be "out" in different contexts than Hispanic and Black students. Note that the "another race/ethnicity" category was omitted here due to a very small number of respondents, which makes it difficult to compute meaningful percentages. 
+
+### MD vs. DO outness
+
+```{r}
+degree_plot <- 
+  plot_outness(
+    my_var_type = "degree", 
+    irrelevant_levels = c(""), 
+    subtitle = "LGBTQ+ student \'outness\' by degree type"
+  )
+
+degree_plot
+
+degree_plot %>% 
+  ggsave(
+    filename = "degree_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+```
+
+As above, it doesn't seem that there are meaningful differences between MD and DO students, although our sample has such a small number of DO students that this is difficult to say for certain. 
+
+### Outness by year of training
+
+```{r}
+year_plot <- 
+  plot_outness(
+    my_var_type = "year", 
+    irrelevant_levels = c("Other"), 
+    subtitle = "LGBTQ+ student \'outness\' by year of training"
+  )
+
+year_plot
+
+year_plot %>% 
+  ggsave(
+    filename = "year_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+```
+
+In this case, it seems that LGBTQ+ medical students in their pre-clinical, clinical, and research years report different degrees of "outness" (or intent for "outness" at later stages of training). As before, we can perform follow-up tests to identify at which stages of training these differences are statistically significant: 
+
+```{r}
+year_outness <- 
+  outness_subgroup %>% 
+  filter(var_type == "year") %>% 
+  pull(data) %>% 
+  pluck(1) %>%
+  filter(identity != "Other") %>% 
+  mutate(number_in = n - number_out)
+
+year_outness
+
+year_significance_tests <- 
+  year_outness %>% 
+  group_by(environment) %>% 
+  select(-n, -percent_out, -identity, -med_school_year) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(
+    matrix = map(data, as.matrix), 
+    prop_test = map(matrix, ~ tidy(prop.test(.x)))
+  ) %>% 
+  unnest(prop_test) %>% 
+  select(
+    -contains("estimate"), 
+    -data, 
+    -matrix,
+    -method, 
+    -alternative,
+    chi_squared = statistic, 
+    p_value = p.value, 
+    df = parameter
+  ) %>% 
+  # Bonferroni correction for multiple comparisons and rounding for aesthetics
+  mutate(
+    chi_squared = round(chi_squared, 2),
+    p_value = 
+      pmin(1, p_value * n()) %>% 
+      round(3), 
+    significance = if_else(p_value < 0.05, "*", "")
+  )
+
+year_significance_tests
+```
+
+Thus, we can see that the environments in which significant difference arose were in students' relationships with mentors, on their applications to medical school, and on their applications to residency/post-doctoral studies.
+
+We can then go back and annotate our plot from before...
+
+```{r}
+label_frame <- 
+  outness_subgroup %>% 
+  filter(var_type == "year") %>% 
+  pull(data) %>% 
+  pluck(1) %>% 
+  filter(identity != "Other") %>% 
+  group_by(environment) %>% 
+  summarize(percent_out = max(percent_out)) %>% 
+  left_join(year_significance_tests) 
+
+year_plot <- 
+  year_plot + 
+  geom_text(
+    data = label_frame, 
+    aes(x = environment, y = percent_out, label = significance), 
+    size = 8, 
+    nudge_y = 5
+  )
+
+year_plot
+  
+year_plot %>% 
+  ggsave(
+    filename = "year_plot.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+```
+
+
+## Do medical students support their (and their peers') ability to be "out" if they want to be? 
+
+So far, we've seen that LGBTQ+ medical students tend to be less "out" about their sexual orientation and gender identity in professional contexts, particularly on their applications to post-graduate medical education (like a residency or post-doctoral position). But how do we know that this isn't just because none of them want to be "out", or that they don't think being "out" about their SO/GI is something that people should be able to do? 
+
+In the MSPA survey, there were also questions that asked students (both LGBTQ+ and non-LGBTQ+) if they supported LGBTQ+ students' ability to be "out" in medical school - and whether or not they thought institutions should put explicit protections in place for students who did choose to be "out". We can compare how many students supported these ideas compared to how many LGBTQ+ students were actually out by using a simple bar plot. 
+
+```{r}
 context_order <- 
   outness_data %>% 
   filter(variable == "Out (or plan to be out)") %>% 
@@ -887,7 +1399,6 @@ context_order <-
   arrange(desc(prop)) %>% 
   pull(context)
   
-
 support_plot <- 
   outness_data %>% 
   filter(!(variable == "Out (or plan to be out)" & is_lgbtq != "LGBTQ+")) %>% 
@@ -947,30 +1458,98 @@ support_plot %>%
   )
 ```
 
+In this plot, I combined LGBTQ+ and non-LGBTQ+ students' responses (because they were not very different to begin with). Of course, this only matters for the orange and red bars, as the "outness" bar was calculated using only LGBTQ+ students' data (because the concept of "outness" is not meaningful for students who do not identify as LGBTQ+). 
 
-```{r, dpi = 300}
-support_plot_gray <- 
-  support_plot + 
-  scale_fill_tableau(palette = "Classic Gray 5")
+From this plot, we can see that in general there's a pretty large difference between the proportion of students who are **actually** out in a given environment compared to the number of students who support students' ability to be out. In other words, it seems that students are fairly supportive of their classmates (and perhaps themselves) being able to share their sexual orientation and gender identity in their professional life, but LGBTQ+ still hesitate to disclose this information in contexts where doing so might harm them (this is my speculation). 
 
-support_plot_gray
+I find the "gap" between LGBTQ+ medical students' actual "outness" and the degree of support that "outness" has among medical students to be really striking. To visualize this gap more explicitly, we can use a ball-and-stick plot to show that, as med students navigate more professional environments, the gap gets bigger.
 
-support_plot_gray %>% 
-  ggsave(
-    filename = "support_plot_gray.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 7.25, 
-    height = 5,
-    units = "in"
+```{r}
+outness_data %>% 
+  # remove the following line if you want to include non-LGBTQ+ students
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  filter(!(variable == "Out (or plan to be out)" & is_lgbtq == "Non-LGBTQ+")) %>% 
+  group_by(variable, context) %>% 
+  summarize(prop = sum(is_out == "yes") / n()) %>% 
+  filter(variable != "Support ability to be out") %>% 
+  mutate(context = fct_reorder(context, desc(prop))) %>% 
+  ggplot(aes(x = context, y = prop, fill = variable)) + 
+  geom_line(aes(group = context), size = 2, color = "gray60") + 
+  geom_point(shape = 21, color = "black", size = 4, stroke = 1) +
+  geom_text(
+    aes(label = (prop * 100) %>% round(0) %>% str_c("%")), 
+    size = 4, 
+    position = position_dodge(width = 1.5), 
+    fontface = "bold"
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(labels = scales::label_percent(accuracy = 1)) + 
+  scale_fill_manual(
+    values = c(mspa_hex, "gray60")
+  ) + 
+  guides(fill = guide_legend(reverse = TRUE, label.theme = element_text(size = 10))) + 
+  theme(
+    legend.position = "right", 
+    axis.text.x = element_text(size = 11, angle = 35, hjust = 1)
+    ) + 
+  labs(
+    x = NULL, 
+    y = "% of Students", 
+    fill = NULL, 
+    caption = 
+      str_glue("N = {lgbtq_n}", lgbtq_n = sum(na_data$is_lgbtq == "LGBTQ+", na.rm = TRUE))
   )
 ```
 
+This plot makes it really easy to see that, as we move from the right side (the "less professional" side of the plot) to the right side of the plot (the "more professional side"), the disparity between the proportion of "out" students and the number of supportive students gets progressively larger. 
 
-Alluvium Plot 
+Using a simple `prop.test` test, we can also confirm that all of these gaps are significant (even the first one).
 
 ```{r}
+outness_vs_support_tests <- 
+  tibble(environment = context_order) %>% 
+  mutate(
+    chi_tests = 
+      map(
+        .x = environment, 
+        .f = ~ 
+          table(
+            outness_data %>%
+              filter(is_lgbtq == "LGBTQ+") %>% 
+              filter(context == .x) %>% 
+              filter(variable != "Support ability to be out") %>% 
+              pull(variable), 
+            outness_data %>%
+              filter(context == .x) %>% 
+              filter(is_lgbtq == "LGBTQ+") %>% 
+              filter(variable != "Support ability to be out") %>% 
+              pull(is_out) 
+          ) %>% 
+          prop.test() %>% 
+          tidy()
+      )
+  ) %>% 
+  unnest(chi_tests) %>% 
+  transmute(
+    environment, 
+    chi_squared = round(statistic, 2),
+    # note the bonferonni correction in the line below
+    p_value = formatC(p.value * 5, digits = 1, format = "e"), 
+    df = parameter 
+  )
+
+outness_vs_support_tests
+```
+
+
+
+## What's the difference between medical school applications and residency applications? 
+
+Among LGBTQ+ pre-medical and medical students, a conversation that comes up a lot is whether it's safe to be "out" on your applications (i.e. should you avoid mentioning a partner? should you remove the volunteer work you do at the LGBTQ+ center from your CV?). (On a personal note, this is a question that I've been asked enough times that I even wrote a little [think-piece](https://scopeblog.stanford.edu/2019/12/04/advice-for-lgbtq-medical-school-applicants/) about it). 
+
+From the data above, we can see that more LGBTQ+ medical students are comfortable with the idea of being "out" on their applications to medical school than they are with the idea of being out on their applications to post-medical school employment. One way to visualize this shift is to use an [alluvial plot](https://en.wikipedia.org/wiki/Alluvial_diagram), a type of plot designed to show the "flow" of one categorical variable to another (often over time). 
+
+```{r, include = FALSE}
 alluvium_plot <- 
   na_data %>% 
   filter(is_lgbtq == "LGBTQ+") %>% 
@@ -1043,12 +1622,101 @@ alluvium_plot %>%
 
 ```
 
+
+```{r}
+alluvium_plot <- 
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(
+    out_classmates_peers, 
+    out_medical_school_app, 
+    out_residency_app, 
+    out_mentors, 
+    out_labmates_coworkers_team
+  ) %>% 
+  ggplot(
+    aes(
+      y = n, 
+      axis1 = str_to_title(out_medical_school_app),
+      axis2 = str_to_title(out_residency_app)
+    )
+  ) + 
+  geom_alluvium(aes(fill = out_medical_school_app), alpha = 0.65) + 
+  geom_stratum(width = 1/3, fill = "gray99", color = "black") + 
+  geom_text(stat = "stratum", infer.label = TRUE, size = 3) + 
+  scale_x_discrete(
+    limits = 
+      c(
+        "out_medical_school_app",
+        "out_residency_app"
+      ), 
+    labels = 
+      c(
+        "Out on medical school application?",
+        "Out on residency application?"
+      ) %>% 
+      str_wrap(width = 20),
+    expand = c(0.1, 0.1)
+  ) + 
+  scale_y_continuous(
+    labels = scales::label_number()
+  ) + 
+  scale_fill_tableau() + 
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(
+    subtitle = "LGBTQ+ medical students are less \'out\' when applying\n to residency than when applying to medical school",  
+    x = NULL, 
+    y = "Number of students", 
+    fill = NULL,
+    caption = str_glue("N = {(na_data$is_lgbtq == \"LGBTQ+\") %>% sum(na.rm = TRUE)}")
+  )
+
+alluvium_plot
+
+alluvium_plot %>% 
+  ggsave(
+    filename = "outness_alluvium_2.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = file.path(figure_out_path), 
+    width = 4.5, 
+    height = 4.5, 
+    units = "in"
+  )
+```
+
+The way to read the plot above is left-to-right: On the left, the y-axis represents the number of students who were "out" on their medical school applications (and amounts more or less to a stacked bar plot). On the right, the y-axis represents the number of students who were "out" (or who planned to be "out") on their applications to residency/post-doctoral work. The colorful streams between the left and right sides of the plot represent the "flow" of students choosing whether or not to be "out" on either type of application - students who were "out" on their medical school applications are shown in orange, and students who were not "out" on their medical school applications are shown in blue. 
+
+In the middle of the plot, we see that a large "chunk" of orange students cross over from having been "out" on their medical school applications to not being "out" on their residency applications, whereas a smaller "chunk" of blue students cross over in the other direction. This illustrates that, for some reason, there's a net movement of students towards being less comfortable being "out" from the beginning of medical school to the end of medical school. 
+
+
+## Putting our plots together using {patchwork}
+
+### Figure 1
+
+```{r}
+
+```
+
+### Figure 2
+
+```{r}
+
+```
+
+
+
+
+
+```{r, include = FALSE}
 ## Significance testing
 
 
-### Outness at different stages of training
+### Outness at different stages of training (overall)
 
-```{r}
+# I redid this, so I'm pretty sure it can be removed. 
+
 contingency_table <- 
   table(
     outness_data %>% 
@@ -1063,6 +1731,8 @@ contingency_table <-
 contingency_table %>% 
   chisq.test()
 
+
+# pairwise chi-squared tests for specific differences
 p_values <- 
   matrix(nrow = nrow(contingency_table), ncol = nrow(contingency_table))
 
@@ -1092,88 +1762,79 @@ for (i in 1:5) {
 }
 
 #bonferroni correction
-p_values <- p_values * 10
+p_values <- pmin(p_values * 10, 1)
 
-p_values %>% 
+p_values
+
+chi_squared_values 
+```
+
+
+
+```{r, include = FALSE}
+### Support for outness in different stages of medical training in LGBTQ+ vs. non-LGBTQ+ people
+
+
+support_chis <- 
+  outness_data %>% 
+  filter(variable != "Out (or plan to be out)") %>% 
+  group_by(is_lgbtq, context, variable) %>% 
+  summarize(
+    number_out = sum(is_out == "yes"), 
+    n = n(), 
+    number_in = n - number_out
+  ) %>% 
+  group_by(variable) %>% 
+  nest() %>%
+  ungroup() %>% 
+  mutate(
+    data = 
+      map(
+        .x = data, 
+        .f = ~ 
+          .x %>% 
+          group_by(context) %>% 
+          nest() %>% 
+          ungroup() %>% 
+          mutate(
+            matrix = 
+              map(
+                .x = data, 
+                .f = ~ 
+                  select(.x, -is_lgbtq, -n) %>% 
+                  as.matrix()
+              ), 
+            prop_test = map(.x = matrix, .f = ~ tidy(prop.test(.x)))
+          ) %>% 
+          unnest(prop_test) %>% 
+          mutate(
+            context, 
+            p_value = 
+              pmin(p.value * 10, 1) %>% 
+              round(3), 
+            df = parameter, 
+            chi_squared = round(statistic, 2)
+          )
+      ) 
+  )
+
+support_chis$data
+
+
+```
+
+
+## Some qualitative thoughts on "outness"
+
+Students also offered some free-response information about being "out" in their lives and careers as medical students. We provide these answers below. 
+
+```{r}
+na_data %>% 
+  select(out_other_explanation) %>% 
+  drop_na() %>% 
   knitr::kable() %>% 
   kable_styling()
-
-chi_squared_values %>% 
-  knitr::kable() %>% 
-  kable_styling()
 ```
 
-
-### Outness vs. support for outness in different stages of medical training
-
-```{r}
-#to peers 
-table(
-  outness_data %>% 
-    filter(context == "To peers") %>% 
-    pull(variable), 
-  outness_data %>% 
-    filter(context == "To peers") %>% 
-    pull(is_out)
-) %>% 
-  chisq.test()
-
-```
-
-```{r}
-#to labmates 
-table(
-  outness_data %>% 
-    filter(context == "To lab-mates or team members") %>% 
-    pull(variable), 
-  outness_data %>% 
-    filter(context == "To lab-mates or team members") %>% 
-    pull(is_out)
-) %>% 
-  chisq.test()
-
-```
-
-```{r}
-# MD application 
-table(
-  outness_data %>% 
-    filter(context == "On application to medical school") %>% 
-    pull(variable), 
-  outness_data %>% 
-    filter(context == "On application to medical school") %>% 
-    pull(is_out)
-) %>% 
-  chisq.test()
-
-```
-
-```{r}
-#to mentors 
-table(
-  outness_data %>% 
-    filter(context == "To mentors") %>% 
-    pull(variable), 
-  outness_data %>% 
-    filter(context == "To mentors") %>% 
-    pull(is_out)
-) %>% 
-  chisq.test()
-
-```
-
-```{r}
-#to GME 
-table(
-  outness_data %>% 
-    filter(context == "On application to residency/post-doctoral studies") %>% 
-    pull(variable), 
-  outness_data %>% 
-    filter(context == "On application to residency/post-doctoral studies") %>% 
-    pull(is_out)
-) %>% 
-  chisq.test()
-
-```
 
 

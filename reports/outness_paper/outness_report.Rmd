@@ -35,7 +35,7 @@ figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
 
 likert_colors <- c("darkgreen","green","orange","red","darkred")
 
-likert_labels <- 
+likert_labels <-
   c(
     "Strongly disagree",
     "Somewhat disagree", 
@@ -646,12 +646,13 @@ overall_outness_plot <-
   ) + 
   geom_text(
     aes(label = str_c(percent_out, "%")), 
-    nudge_y = 8.5, 
-    nudge_x = 0.13
+    nudge_y = 11, 
+    nudge_x = 0.17
   ) + 
   geom_text(
     aes(label = significant), 
-    nudge_y = 12, 
+    nudge_y = 14,
+    nudge_x = 0,
     size = 6
   ) + 
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
@@ -1348,6 +1349,9 @@ year_significance_tests <-
   )
 
 year_significance_tests
+
+?prop.test
+
 ```
 
 Thus, we can see that the environments in which significant difference arose were in students' relationships with mentors, on their applications to medical school, and on their applications to residency/post-doctoral studies.
@@ -1395,6 +1399,16 @@ So far, we've seen that LGBTQ+ medical students tend to be less "out" about thei
 
 In the MSPA survey, there were also questions that asked students (both LGBTQ+ and non-LGBTQ+) if they supported LGBTQ+ students' ability to be "out" in medical school - and whether or not they thought institutions should put explicit protections in place for students who did choose to be "out". We can compare how many students supported these ideas compared to how many LGBTQ+ students were actually out by using a simple bar plot. 
 
+
+```{r}
+outness_data %>% 
+  filter(variable != "Out (or plan to be out)") %>% 
+  group_by(variable) %>% 
+  summarize(prop = sum(is_out == "yes") / n())
+  
+```
+
+
 ```{r}
 context_order <- 
   outness_data %>% 
@@ -1412,7 +1426,8 @@ support_plot <-
   mutate(
     environment = factor(context, levels = context_order), 
     percent_out = (prop * 100) %>% round(1), 
-    identity = "overall"
+    identity = "overall", 
+    significance = if_else(str_detect(variable, "or plan to be out"), "*", "")
   ) %>% 
   ggplot(aes(x = environment, y = percent_out)) + 
   geom_col(
@@ -1430,6 +1445,11 @@ support_plot <-
     position = position_dodge(width = 0.91), 
     fontface = "bold", 
     vjust = -0.3
+  ) + 
+  geom_text(
+    aes(y = percent_out + 8, group = variable, label = significance),
+    size = 6, 
+    position = position_dodge(width = 0.91)
   ) + 
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
   scale_y_continuous(
@@ -1531,6 +1551,8 @@ gap_plot <-
   )
 
 gap_plot 
+
+
 ```
 
 This plot makes it really easy to see that, as we move from the right side (the "less professional" side of the plot) to the right side of the plot (the "more professional side"), the disparity between the proportion of "out" students and the number of supportive students gets progressively larger. 
@@ -1722,6 +1744,26 @@ The way to read the plot above is left-to-right: On the left, the y-axis represe
 
 In the middle of the plot, we see that a large "chunk" of orange students cross over from having been "out" on their medical school applications to not being "out" on their residency applications, whereas a smaller "chunk" of blue students cross over in the other direction. This illustrates that, for some reason, there's a net movement of students towards being less comfortable being "out" from the beginning of medical school to the end of medical school. 
 
+```{r}
+alluvium_counting <- 
+ na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(out_medical_school_app, out_residency_app) %>% 
+  arrange(desc(out_medical_school_app, desc(out_residency_app))) %>% 
+  group_by(
+    out_medical_school_app
+  ) %>% 
+  mutate(
+    total_out = sum(n), 
+    percent = n / sum(n) * 100
+  )
+
+alluvium_counting
+
+
+```
+
+
 
 ## Putting our plots together using {patchwork}
 
@@ -1874,6 +1916,19 @@ alternate_figure_1 <-
     legend.title = element_text(size = 12, face = "bold"), 
     plot.tag = element_text(size = 20)
   )
+
+alternate_figure_1 <- 
+  wrap_plots(figure_1a, figure_1b, figure_s1a, figure_s1c, figure_1c, figure_s1b) + 
+  plot_layout(ncol = 2) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    legend.title = element_text(size = 12, face = "bold"), 
+    plot.tag = element_text(size = 20)
+  )
+
   
 alternate_figure_1 %>% 
     ggsave(
@@ -2009,6 +2064,9 @@ chi_squared_values
 
 
 
+
+
+
 ```{r, include = FALSE}
 ### Support for outness in different stages of medical training in LGBTQ+ vs. non-LGBTQ+ people
 
@@ -2062,6 +2120,34 @@ support_chis$data
 ```
 
 
+```{r, include = FALSE}
+outness_data
+
+#my_context <- "To peers"
+
+mcnemar_test <- 
+  function(my_context) { 
+    outness_data %>% 
+      filter(is_lgbtq == "LGBTQ+") %>% 
+      filter(variable != "Support ability to be out") %>% 
+      filter(context == my_context) %>% 
+      select(variable, is_out) %>%  
+      table() %>% 
+      mcnemar.test() %>% 
+      tidy()
+  }
+
+gap_tests <- 
+  tibble(context = unique(outness_data$context)) %>% 
+  mutate(test_results = map(.x = context, mcnemar_test)) %>% 
+  unnest(test_results) %>% 
+  mutate(p_value = pmin(1, p.value * 5))
+
+gap_tests
+
+```
+
+
 ## Some qualitative thoughts on "outness"
 
 Students also offered some free-response information about being "out" in their lives and careers as medical students. We provide these answers below. 
@@ -2074,5 +2160,9 @@ na_data %>%
   kable_styling()
 ```
 
+## Number of words in manuscript
 
+```{r}
+274 + 331 + 364 + 194
+```
 

@@ -1,7 +1,7 @@
 Outness report
 ================
 Timothy Keyes
-2020-12-04
+2020-12-05
 
   - [Data quality and cleaning](#data-quality-and-cleaning)
   - [Univariate Demographics report](#univariate-demographics-report)
@@ -33,6 +33,7 @@ Timothy Keyes
       - [Table 1](#table-1)
   - [Some qualitative thoughts on
     “outness”](#some-qualitative-thoughts-on-outness)
+  - [Number of words in manuscript](#number-of-words-in-manuscript)
 
 First, I’ll load the libraries I want and set up a few parameters that
 will make data cleaning easier in later steps.
@@ -55,7 +56,7 @@ figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
 
 likert_colors <- c("darkgreen","green","orange","red","darkred")
 
-likert_labels <- 
+likert_labels <-
   c(
     "Strongly disagree",
     "Somewhat disagree", 
@@ -4579,12 +4580,13 @@ overall_outness_plot <-
   ) + 
   geom_text(
     aes(label = str_c(percent_out, "%")), 
-    nudge_y = 8.5, 
-    nudge_x = 0.13
+    nudge_y = 11, 
+    nudge_x = 0.17
   ) + 
   geom_text(
     aes(label = significant), 
-    nudge_y = 12, 
+    nudge_y = 14,
+    nudge_x = 0,
     size = 6
   ) + 
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
@@ -5476,6 +5478,19 @@ compared to how many LGBTQ+ students were actually out by using a simple
 bar plot.
 
 ``` r
+outness_data %>% 
+  filter(variable != "Out (or plan to be out)") %>% 
+  group_by(variable) %>% 
+  summarize(prop = sum(is_out == "yes") / n())
+```
+
+    ## # A tibble: 2 x 2
+    ##   variable                         prop
+    ##   <chr>                           <dbl>
+    ## 1 Support ability to be out       0.904
+    ## 2 Support protections for outness 0.926
+
+``` r
 context_order <- 
   outness_data %>% 
   filter(variable == "Out (or plan to be out)") %>% 
@@ -5492,7 +5507,8 @@ support_plot <-
   mutate(
     environment = factor(context, levels = context_order), 
     percent_out = (prop * 100) %>% round(1), 
-    identity = "overall"
+    identity = "overall", 
+    significance = if_else(str_detect(variable, "or plan to be out"), "*", "")
   ) %>% 
   ggplot(aes(x = environment, y = percent_out)) + 
   geom_col(
@@ -5510,6 +5526,11 @@ support_plot <-
     position = position_dodge(width = 0.91), 
     fontface = "bold", 
     vjust = -0.3
+  ) + 
+  geom_text(
+    aes(y = percent_out + 8, group = variable, label = significance),
+    size = 6, 
+    position = position_dodge(width = 0.91)
   ) + 
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
   scale_y_continuous(
@@ -5532,7 +5553,7 @@ support_plot <-
 support_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ``` r
 support_plot %>% 
@@ -5634,7 +5655,7 @@ gap_plot <-
 gap_plot 
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 This plot makes it really easy to see that, as we move from the right
 side (the “less professional” side of the plot) to the right side of the
@@ -5762,7 +5783,7 @@ alluvium_plot <-
 alluvium_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
 
 ``` r
 alluvium_plot %>% 
@@ -5796,6 +5817,29 @@ a smaller “chunk” of blue students cross over in the other direction.
 This illustrates that, for some reason, there’s a net movement of
 students towards being less comfortable being “out” from the beginning
 of medical school to the end of medical school.
+
+``` r
+alluvium_counting <- 
+ na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(out_medical_school_app, out_residency_app) %>% 
+  arrange(desc(out_medical_school_app, desc(out_residency_app))) %>% 
+  group_by(
+    out_medical_school_app
+  ) %>% 
+  mutate(percent = n / sum(n) * 100)
+
+alluvium_counting
+```
+
+    ## # A tibble: 4 x 4
+    ## # Groups:   out_medical_school_app [2]
+    ##   out_medical_school_app out_residency_app     n percent
+    ##   <chr>                  <chr>             <int>   <dbl>
+    ## 1 yes                    no                  216    61.0
+    ## 2 yes                    yes                 138    39.0
+    ## 3 no                     no                  231    84  
+    ## 4 no                     yes                  44    16
 
 ## Putting our plots together using {patchwork}
 
@@ -5944,6 +5988,19 @@ alternate_figure_1 <-
     legend.title = element_text(size = 12, face = "bold"), 
     plot.tag = element_text(size = 20)
   )
+
+alternate_figure_1 <- 
+  wrap_plots(figure_1a, figure_1b, figure_s1a, figure_s1c, figure_1c, figure_s1b) + 
+  plot_layout(ncol = 2) + 
+  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
+  theme(
+    axis.text = element_text(size = 11),
+    axis.title = element_text(size = 12), 
+    legend.text = element_text(size = 11),
+    legend.title = element_text(size = 12, face = "bold"), 
+    plot.tag = element_text(size = 20)
+  )
+
   
 alternate_figure_1 %>% 
     ggsave(
@@ -9634,3 +9691,11 @@ Friends
 </tbody>
 
 </table>
+
+## Number of words in manuscript
+
+``` r
+274 + 331 + 364 + 194
+```
+
+    ## [1] 1163

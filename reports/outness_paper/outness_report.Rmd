@@ -1,5 +1,5 @@
 ---
-title: "Outness report"
+title: "Are LGBTQ+ people comfortable being \"out\" in medical school?"
 author: "Timothy Keyes"
 date: "`r Sys.Date()`"
 always_allow_html: true
@@ -14,6 +14,12 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, dpi = 300)
 ```
 
+
+# Introduction
+
+In this analysis, we're going to clean and visualize survey data of 1162 medical students collected by the [Medical Student Pride Alliance (MSPA)](https://www.medpride.org/), a nonprofit organization that works with medical students who identify as lesbian, gay, bisexual, transgender, queer, or another sexual and/or gender minority identity (LGBTQ+). This survey was conducted as a part of MSPA's larger needs-assessment of LGBTQ+ medical students' needs and experiences while in medical school, but here we will focus explicitly on questions involving whether or not students were comfortable being "out" with regard to their sexual orientation and/or gender identity while in medical school. Many medical students report concerns about fear of discrimination while in medical school - and particularly when they apply to residency after medical school. So, it's important to know where LGBTQ+ medical students' are comfortable being "out" (and where they aren't) so that we can focus diversity, equity, and inclusion efforts in the right places. 
+
+# Setup and data cleaning 
 
 First, I'll load the libraries I want and set up a few parameters that will make data cleaning easier in later steps. 
 
@@ -32,26 +38,6 @@ library(DescTools)
 input_path <- here::here("data", "mspa_na_data.rds")
 metadata_path <- here::here("data-raw", "school_metadata.csv")
 figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
-
-likert_colors <- c("darkgreen","green","orange","red","darkred")
-
-likert_labels <-
-  c(
-    "Strongly disagree",
-    "Somewhat disagree", 
-    "Neither agree nor disagree", 
-    "Somewhat agree", 
-    "Strongly agree"
-  )
-
-interest_labels <- 
-  c(
-    "Not at all interested",
-    "Less interested", 
-    "Undecided", 
-    "Somewhat interested", 
-    "Very interested"
-  )
 
 recode_values <- 
   c(
@@ -112,8 +98,6 @@ metadata <-
   janitor::clean_names()
 ```
 
-
-## Data quality and cleaning
 
 I've already done some data cleaning in previous scripts, but there are still a few tweaks that we probably want to make so that everything is human-readable and so that only useful information is carried forward. 
 
@@ -188,6 +172,26 @@ na_data <-
 
 ```
 
+In our analyses here, we'll actually ignore most of these variables and focus on just a couple. Specifically, we're interested in analyzing LGBTQ+ medical students' patterns of "outness" - or disclosing their membership to the LGBTQ+ community - in different contexts during medical school. We'll be looking at this data overall and as a function of several demographic variables like race, gender, sexual orientation, etc. We can select out the variables we're not interested in: 
+
+```{r}
+na_data <- 
+  na_data %>% 
+  select(
+    is_lgbtq,
+    school_attend,
+    med_school_year,
+    degree_type,
+    is_urm,
+    starts_with("so_"), 
+    starts_with("gender_"), 
+    starts_with("race_"), 
+    starts_with("out_"), 
+    starts_with("ability_out"), 
+    starts_with("protections_out")
+  )
+```
+
 
 After all of our preprocessing, we get a dataframe that looks like this:
 
@@ -196,10 +200,7 @@ na_data %>%
   glimpse()
 ```
 
-
-In our analyses here, we'll actually ignore most of these variables and focus on just a couple. Specifically, we're interested in analyzing LGBTQ+ medical students' patterns of "outness" - or disclosing their membership to the LGBTQ+ community - in different contexts during medical school. We'll be looking at this data overall and as a function of several demographic variables like race, gender, sexual orientation, etc. 
-
-As a side note, all of this data was derived from a survey conducted by the [Medical Student Pride Alliance (MSPA)](https://www.medpride.org/), a nonprofit organization that works with medical students who identify as LGBTQ+. 
+# Visualizations
 
 ## Univariate Demographics report
 
@@ -417,7 +418,7 @@ demo_table
 
 
 
-## Who is "out" - some visualizations
+## Who is "out" in medical school?
 
 With these basics out of the way, we can plot which medical students report being comfortable being "out" at different stages of medical training!
 
@@ -1744,7 +1745,7 @@ The way to read the plot above is left-to-right: On the left, the y-axis represe
 
 In the middle of the plot, we see that a large "chunk" of orange students cross over from having been "out" on their medical school applications to not being "out" on their residency applications, whereas a smaller "chunk" of blue students cross over in the other direction. This illustrates that, for some reason, there's a net movement of students towards being less comfortable being "out" from the beginning of medical school to the end of medical school. 
 
-```{r}
+```{r, include = FALSE}
 alluvium_counting <- 
  na_data %>% 
   filter(is_lgbtq == "LGBTQ+") %>% 
@@ -1765,11 +1766,13 @@ alluvium_counting
 
 
 
+
+```{r, include = FALSE}
+
 ## Putting our plots together using {patchwork}
 
 ### Figure 1
 
-```{r}
 figure_1a <- 
   overall_outness_plot + 
   labs(y = "% of \"out\" students", subtitle = NULL)
@@ -1853,7 +1856,7 @@ figure_1 %>%
 
 ```
 
-```{r}
+```{r, include = FALSE}
 figure_1 <- 
   figure_1a / 
   figure_1b / 
@@ -1878,9 +1881,11 @@ figure_1 %>%
 ```
 
 
+```{r, include = FALSE}
+
 ### Supplementary figure 1
 
-```{r}
+
 figure_s1 <- 
   figure_s1a / 
   figure_s1b / 
@@ -1905,7 +1910,7 @@ figure_s1 %>%
 
 ```
 
-```{r}
+```{r, include = FALSE}
 alternate_figure_1 <- 
   wrap_plots(figure_1, figure_s1) + 
   plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
@@ -1943,9 +1948,12 @@ alternate_figure_1 %>%
 ```
 
 
+
+```{r, include = FALSE}
 ### Figure 2
 
-```{r}
+
+
 layout <- "
 AAAA
 BBCC
@@ -1991,9 +1999,11 @@ figure_2 %>%
   
 ```
 
+
+```{r, include = FALSE}
 ### Table 1
 
-```{r}
+
 
 demo_table 
 
@@ -2148,6 +2158,8 @@ gap_tests
 ```
 
 
+# Misc 
+
 ## Some qualitative thoughts on "outness"
 
 Students also offered some free-response information about being "out" in their lives and careers as medical students. We provide these answers below. 
@@ -2160,9 +2172,6 @@ na_data %>%
   kable_styling()
 ```
 
-## Number of words in manuscript
 
-```{r}
-274 + 331 + 364 + 194
-```
+
 

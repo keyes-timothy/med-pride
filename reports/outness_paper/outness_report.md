@@ -1,39 +1,57 @@
-Outness report
+Are LGBTQ+ people comfortable being “out” in medical school?
 ================
 Timothy Keyes
-2020-12-05
+2020-12-07
 
-  - [Data quality and cleaning](#data-quality-and-cleaning)
-  - [Univariate Demographics report](#univariate-demographics-report)
-      - [What school do you attend?](#what-school-do-you-attend)
-      - [All other demographic
-        variables](#all-other-demographic-variables)
-  - [Who is “out” - some
-    visualizations](#who-is-out---some-visualizations)
-      - [All of our data in one plot](#all-of-our-data-in-one-plot)
-      - [Outness overall](#outness-overall)
-      - [A bit more wrangling](#a-bit-more-wrangling)
-      - [Outness by sexual orientation](#outness-by-sexual-orientation)
-      - [Outness across gender
-        identities](#outness-across-gender-identities)
-      - [Outness by Race/ethnicity](#outness-by-raceethnicity)
-      - [MD vs. DO outness](#md-vs.-do-outness)
-      - [Outness by year of training](#outness-by-year-of-training)
-  - [Do medical students support their (and their peers’) ability to be
-    “out” if they want to
-    be?](#do-medical-students-support-their-and-their-peers-ability-to-be-out-if-they-want-to-be)
-  - [What’s the difference between medical school applications and
-    residency
-    applications?](#whats-the-difference-between-medical-school-applications-and-residency-applications)
-  - [Putting our plots together using
-    {patchwork}](#putting-our-plots-together-using-patchwork)
-      - [Figure 1](#figure-1)
-      - [Supplementary figure 1](#supplementary-figure-1)
-      - [Figure 2](#figure-2)
-      - [Table 1](#table-1)
-  - [Some qualitative thoughts on
-    “outness”](#some-qualitative-thoughts-on-outness)
-  - [Number of words in manuscript](#number-of-words-in-manuscript)
+  - [Introduction](#introduction)
+  - [Setup and data cleaning](#setup-and-data-cleaning)
+  - [Visualizations](#visualizations)
+      - [Univariate Demographics
+        report](#univariate-demographics-report)
+          - [What school do you attend?](#what-school-do-you-attend)
+          - [All other demographic
+            variables](#all-other-demographic-variables)
+      - [Who is “out” in medical school?](#who-is-out-in-medical-school)
+          - [All of our data in one plot](#all-of-our-data-in-one-plot)
+          - [Outness overall](#outness-overall)
+          - [A bit more wrangling](#a-bit-more-wrangling)
+          - [Outness by sexual
+            orientation](#outness-by-sexual-orientation)
+          - [Outness across gender
+            identities](#outness-across-gender-identities)
+          - [Outness by Race/ethnicity](#outness-by-raceethnicity)
+          - [MD vs. DO outness](#md-vs.-do-outness)
+          - [Outness by year of training](#outness-by-year-of-training)
+      - [Do medical students support their (and their peers’) ability to
+        be “out” if they want to
+        be?](#do-medical-students-support-their-and-their-peers-ability-to-be-out-if-they-want-to-be)
+      - [What’s the difference between medical school applications and
+        residency
+        applications?](#whats-the-difference-between-medical-school-applications-and-residency-applications)
+  - [Misc](#misc)
+      - [Some qualitative thoughts on
+        “outness”](#some-qualitative-thoughts-on-outness)
+
+# Introduction
+
+In this analysis, we’re going to clean and visualize survey data of 1162
+medical students collected by the [Medical Student Pride Alliance
+(MSPA)](https://www.medpride.org/), a nonprofit organization that works
+with medical students who identify as lesbian, gay, bisexual,
+transgender, queer, or another sexual and/or gender minority identity
+(LGBTQ+). This survey was conducted as a part of MSPA’s larger
+needs-assessment of LGBTQ+ medical students’ needs and experiences while
+in medical school, but here we will focus explicitly on questions
+involving whether or not students were comfortable being “out” with
+regard to their sexual orientation and/or gender identity while in
+medical school. Many medical students report concerns about fear of
+discrimination while in medical school - and particularly when they
+apply to residency after medical school. So, it’s important to know
+where LGBTQ+ medical students’ are comfortable being “out” (and where
+they aren’t) so that we can focus diversity, equity, and inclusion
+efforts in the right places.
+
+# Setup and data cleaning
 
 First, I’ll load the libraries I want and set up a few parameters that
 will make data cleaning easier in later steps.
@@ -53,26 +71,6 @@ library(DescTools)
 input_path <- here::here("data", "mspa_na_data.rds")
 metadata_path <- here::here("data-raw", "school_metadata.csv")
 figure_out_path <- file.path("~", "Desktop", "jgme_final", "Figures")
-
-likert_colors <- c("darkgreen","green","orange","red","darkred")
-
-likert_labels <-
-  c(
-    "Strongly disagree",
-    "Somewhat disagree", 
-    "Neither agree nor disagree", 
-    "Somewhat agree", 
-    "Strongly agree"
-  )
-
-interest_labels <- 
-  c(
-    "Not at all interested",
-    "Less interested", 
-    "Undecided", 
-    "Somewhat interested", 
-    "Very interested"
-  )
 
 recode_values <- 
   c(
@@ -139,8 +137,6 @@ metadata <-
   drop_na() %>% 
   janitor::clean_names()
 ```
-
-## Data quality and cleaning
 
 I’ve already done some data cleaning in previous scripts, but there are
 still a few tweaks that we probably want to make so that everything is
@@ -219,6 +215,32 @@ na_data <-
   drop_na(degree_type)
 ```
 
+In our analyses here, we’ll actually ignore most of these variables and
+focus on just a couple. Specifically, we’re interested in analyzing
+LGBTQ+ medical students’ patterns of “outness” - or disclosing their
+membership to the LGBTQ+ community - in different contexts during
+medical school. We’ll be looking at this data overall and as a function
+of several demographic variables like race, gender, sexual orientation,
+etc. We can select out the variables we’re not interested in:
+
+``` r
+na_data <- 
+  na_data %>% 
+  select(
+    is_lgbtq,
+    school_attend,
+    med_school_year,
+    degree_type,
+    is_urm,
+    starts_with("so_"), 
+    starts_with("gender_"), 
+    starts_with("race_"), 
+    starts_with("out_"), 
+    starts_with("ability_out"), 
+    starts_with("protections_out")
+  )
+```
+
 After all of our preprocessing, we get a dataframe that looks like this:
 
 ``` r
@@ -227,135 +249,62 @@ na_data %>%
 ```
 
     ## Rows: 1,162
-    ## Columns: 115
-    ## $ participant_id                                <dbl> 1, 2, 3, 4, 6, 8, 9, 10…
-    ## $ timestamp                                     <chr> "2018-08-08 09:32:26", …
-    ## $ school_attend                                 <chr> "Stanford University Sc…
-    ## $ med_school_year                               <chr> "Pre-Clinical Student "…
-    ## $ med_school_year_other                         <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ is_lgbtq                                      <chr> "LGBTQ+", "LGBTQ+", "LG…
-    ## $ sab_is_male                                   <chr> "no", "no", "no", "no",…
-    ## $ sab_is_female                                 <chr> "no", "no", "no", "no",…
-    ## $ gender_man                                    <chr> "no", "yes", "no", "yes…
-    ## $ gender_woman                                  <chr> "yes", "no", "no", "no"…
-    ## $ gender_agender                                <chr> "no", "no", "no", "no",…
-    ## $ gender_genderqueer                            <chr> "no", "no", "yes", "no"…
-    ## $ gender_transman                               <chr> "no", "no", "no", "no",…
-    ## $ gender_transwoman                             <chr> "no", "no", "no", "no",…
-    ## $ gender_another                                <chr> "no", "no", "no", "no",…
-    ## $ gender_another_description                    <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ so_asexual                                    <chr> "no", "no", "no", "no",…
-    ## $ so_bisexual                                   <chr> "yes", "no", "no", "no"…
-    ## $ so_gay                                        <chr> "yes", "yes", "yes", "y…
-    ## $ so_lesbian                                    <chr> "no", "no", "no", "no",…
-    ## $ so_pansexual                                  <chr> "yes", "no", "no", "no"…
-    ## $ so_queer                                      <chr> "yes", "no", "no", "yes…
-    ## $ so_questioning                                <chr> "no", "no", "no", "no",…
-    ## $ so_heterosexual                               <chr> "no", "no", "no", "no",…
-    ## $ so_another                                    <chr> "no", "no", "no", "no",…
-    ## $ so_another_description                        <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ race_native                                   <chr> "no", "no", "no", "no",…
-    ## $ race_asian                                    <chr> "no", "no", "no", "no",…
-    ## $ race_black                                    <chr> "no", "no", "no", "no",…
-    ## $ race_pi                                       <chr> "no", "no", "no", "no",…
-    ## $ race_white                                    <chr> "yes", "no", "yes", "ye…
-    ## $ race_hispanic                                 <chr> "no", "yes", "yes", "ye…
-    ## $ race_another                                  <chr> "no", "no", "no", "no",…
-    ## $ race_another_explanation                      <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ interaction_agree                             <dbl> 2, 2, 2, 2, 4, 4, 4, 3,…
-    ## $ interaction_satisfaction                      <dbl> 2, 2, 2, 1, 4, 4, 4, 2,…
-    ## $ personal_benefit_mspa                         <dbl> 5, 5, 5, 5, 5, 1, 5, 5,…
-    ## $ community_benefit_mspa                        <dbl> 5, 5, 5, 5, 5, 2, 5, 5,…
-    ## $ enhanced_activity_mspa_lgbtq_meded            <chr> "yes", "yes", "yes", "y…
-    ## $ enhanced_activity_mspa_social                 <chr> "yes", "yes", "yes", "y…
-    ## $ enhanced_activity_mspa_di_training            <chr> "no", "yes", "yes", "ye…
-    ## $ enhanced_activity_mspa_discrim_bias_reduction <chr> "no", "yes", "yes", "ye…
-    ## $ enhanced_activity_mspa_mentorship             <chr> "yes", "yes", "yes", "y…
-    ## $ enhanced_activity_mspa_advocacy               <chr> "yes", "yes", "yes", "y…
-    ## $ enhanced_activity_mspa_global_health          <chr> "no", "yes", "yes", "ye…
-    ## $ enhanced_activity_mspa_other                  <chr> "no", "no", "no", "no",…
-    ## $ enhanced_activity_mspa_other_explanation      <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ school_affinity_group_exist                   <chr> "yes", "yes", "yes", "y…
-    ## $ school_affinity_group_benefit                 <dbl> NA, NA, NA, NA, NA, NA,…
-    ## $ school_affinity_group_involved                <chr> "yes", "yes", "yes", "y…
-    ## $ why_not_involved_time                         <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_value                        <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_opportunities                <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_uninterested                 <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_not_queer                    <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_another                      <chr> "no", "no", "no", "no",…
-    ## $ why_not_involved_another_explanation          <chr> NA, NA, NA, NA, NA, "I …
-    ## $ school_activities_advocacy                    <chr> "yes", "yes", "yes", "n…
-    ## $ school_activities_social                      <chr> "yes", "yes", "yes", "y…
-    ## $ school_activities_mentorship                  <chr> "no", "no", "yes", "no"…
-    ## $ school_activities_educational                 <chr> "yes", "yes", "yes", "y…
-    ## $ school_activities_research                    <chr> "yes", "yes", "yes", "n…
-    ## $ school_activities_intercollegiate             <chr> "no", "no", "no", "no",…
-    ## $ school_activities_other                       <chr> "no", "no", "no", "no",…
-    ## $ school_activities_other_explanation           <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ school_affinity_group_mission                 <dbl> 4, 4, 4, 2, 5, 2, 5, 5,…
-    ## $ school_affinity_group_supported               <dbl> 5, 4, 4, 4, 5, 1, 5, 4,…
-    ## $ school_affinity_group_identify                <dbl> 4, 3, 4, 2, 4, 1, 5, 4,…
-    ## $ interest_lgbtq_meded                          <dbl> 5, 5, 4, 5, 5, 4, 5, 5,…
-    ## $ interest_lgbtq_social                         <dbl> 3, 4, 4, 3, 5, 2, 4, 5,…
-    ## $ interest_lgbtq_bias_training                  <dbl> 4, 5, 4, 5, 5, 3, 5, 5,…
-    ## $ interest_lgbtq_advocacy                       <dbl> 5, 5, 5, 5, 5, 4, 5, 5,…
-    ## $ interest_lgbtq_global_health                  <dbl> 3, 3, 2, 5, 4, 2, 4, 5,…
-    ## $ interest_lgbtq_other                          <chr> NA, NA, NA, NA, NA, "LG…
-    ## $ importance_lgbtq_meded                        <chr> "yes", "yes", "yes", "y…
-    ## $ importance_lgbtq_social                       <chr> "no", "yes", "yes", "no…
-    ## $ importance_lgbtq_bias_training                <chr> "no", "yes", "yes", "ye…
-    ## $ importance_lgbtq_mentorship                   <chr> "yes", "yes", "yes", "y…
-    ## $ importance_lgbtq_advocacy                     <chr> "yes", "yes", "yes", "y…
-    ## $ importance_lgbtq_global_health                <chr> "no", "yes", "no", "yes…
-    ## $ satisfaction_lgbtq_meded                      <dbl> 5, 5, 3, 1, 4, 2, 3, 3,…
-    ## $ satisfaction_lgbtq_social                     <dbl> 8, 6, 4, 4, 5, 1, 3, 3,…
-    ## $ satisfaction_bias_training                    <dbl> 4, 3, 2, 2, 3, 2, 3, 3,…
-    ## $ satisfaction_lgbtq_mentorship                 <dbl> 4, 2, 2, 2, 4, 2, 4, 3,…
-    ## $ satisfaction_lgbtq_advocacy                   <dbl> 7, 6, 4, 2, 4, 2, 4, 3,…
-    ## $ satisfaction_lgbtq_global_health              <dbl> 1, 1, 2, 1, 3, 3, 3, 2,…
-    ## $ out_classmates_peers                          <chr> "yes", "yes", "yes", "y…
-    ## $ out_labmates_coworkers_team                   <chr> "yes", "yes", "yes", "y…
-    ## $ out_mentors                                   <chr> "yes", "yes", "yes", "y…
-    ## $ out_medical_school_app                        <chr> "yes", "yes", "yes", "y…
-    ## $ out_residency_app                             <chr> "no", "yes", "no", "yes…
-    ## $ out_other                                     <chr> "no", "yes", "no", "no"…
-    ## $ out_other_explanation                         <chr> NA, "on an outlist", NA…
-    ## $ ability_out_classmates_peers                  <chr> "yes", "yes", "yes", "y…
-    ## $ ability_out_labmates_coworkers_team           <chr> "yes", "yes", "yes", "y…
-    ## $ ability_out_mentors                           <chr> "yes", "yes", "yes", "y…
-    ## $ ability_out_medical_school_app                <chr> "yes", "yes", "yes", "y…
-    ## $ ability_out_residency_app                     <chr> "yes", "yes", "yes", "y…
-    ## $ ability_out_other                             <chr> "no", "yes", "no", "no"…
-    ## $ ability_out_other_explanation                 <chr> NA, "on an outlist", NA…
-    ## $ protections_out_classmates_peers              <chr> "yes", "yes", "yes", "y…
-    ## $ protections_out_labmates_coworkers_team       <chr> "yes", "yes", "yes", "y…
-    ## $ protections_out_mentors                       <chr> "yes", "yes", "yes", "y…
-    ## $ protections_out_medical_school_app            <chr> "yes", "yes", "yes", "y…
-    ## $ protections_out_residency_app                 <chr> "yes", "yes", "yes", "y…
-    ## $ protections_out_other                         <chr> "no", "yes", "no", "no"…
-    ## $ protections_out_other_explanation             <chr> NA, "on an outlist", NA…
-    ## $ intersectionality                             <chr> NA, "intersectionality …
-    ## $ sex                                           <chr> NA, NA, NA, NA, NA, NA,…
-    ## $ is_urm                                        <chr> "no", "yes", "yes", "ye…
-    ## $ `gender_gender-expansive`                     <chr> "no", "no", "yes", "no"…
-    ## $ state                                         <chr> "California", "Californ…
-    ## $ state_abbr                                    <chr> "CA", "CA", "CA", "MD",…
-    ## $ city                                          <chr> "Palo Alto & San Franci…
-    ## $ degree_type                                   <fct> allopathic, allopathic,…
+    ## Columns: 53
+    ## $ is_lgbtq                                <chr> "LGBTQ+", "LGBTQ+", "LGBTQ+",…
+    ## $ school_attend                           <chr> "Stanford University School o…
+    ## $ med_school_year                         <chr> "Pre-Clinical Student ", "Res…
+    ## $ degree_type                             <fct> allopathic, allopathic, allop…
+    ## $ is_urm                                  <chr> "no", "yes", "yes", "yes", "n…
+    ## $ so_asexual                              <chr> "no", "no", "no", "no", "no",…
+    ## $ so_bisexual                             <chr> "yes", "no", "no", "no", "no"…
+    ## $ so_gay                                  <chr> "yes", "yes", "yes", "yes", "…
+    ## $ so_lesbian                              <chr> "no", "no", "no", "no", "no",…
+    ## $ so_pansexual                            <chr> "yes", "no", "no", "no", "no"…
+    ## $ so_queer                                <chr> "yes", "no", "no", "yes", "no…
+    ## $ so_questioning                          <chr> "no", "no", "no", "no", "no",…
+    ## $ so_heterosexual                         <chr> "no", "no", "no", "no", "yes"…
+    ## $ so_another                              <chr> "no", "no", "no", "no", "no",…
+    ## $ so_another_description                  <chr> NA, NA, NA, NA, NA, NA, NA, N…
+    ## $ gender_man                              <chr> "no", "yes", "no", "yes", "ye…
+    ## $ gender_woman                            <chr> "yes", "no", "no", "no", "no"…
+    ## $ gender_agender                          <chr> "no", "no", "no", "no", "no",…
+    ## $ gender_genderqueer                      <chr> "no", "no", "yes", "no", "no"…
+    ## $ gender_transman                         <chr> "no", "no", "no", "no", "no",…
+    ## $ gender_transwoman                       <chr> "no", "no", "no", "no", "no",…
+    ## $ gender_another                          <chr> "no", "no", "no", "no", "no",…
+    ## $ gender_another_description              <chr> NA, NA, NA, NA, NA, NA, NA, N…
+    ## $ `gender_gender-expansive`               <chr> "no", "no", "yes", "no", "no"…
+    ## $ race_native                             <chr> "no", "no", "no", "no", "no",…
+    ## $ race_asian                              <chr> "no", "no", "no", "no", "yes"…
+    ## $ race_black                              <chr> "no", "no", "no", "no", "no",…
+    ## $ race_pi                                 <chr> "no", "no", "no", "no", "no",…
+    ## $ race_white                              <chr> "yes", "no", "yes", "yes", "n…
+    ## $ race_hispanic                           <chr> "no", "yes", "yes", "yes", "n…
+    ## $ race_another                            <chr> "no", "no", "no", "no", "no",…
+    ## $ race_another_explanation                <chr> NA, NA, NA, NA, NA, NA, NA, N…
+    ## $ out_classmates_peers                    <chr> "yes", "yes", "yes", "yes", "…
+    ## $ out_labmates_coworkers_team             <chr> "yes", "yes", "yes", "yes", "…
+    ## $ out_mentors                             <chr> "yes", "yes", "yes", "yes", "…
+    ## $ out_medical_school_app                  <chr> "yes", "yes", "yes", "yes", "…
+    ## $ out_residency_app                       <chr> "no", "yes", "no", "yes", "no…
+    ## $ out_other                               <chr> "no", "yes", "no", "no", "no"…
+    ## $ out_other_explanation                   <chr> NA, "on an outlist", NA, NA, …
+    ## $ ability_out_classmates_peers            <chr> "yes", "yes", "yes", "yes", "…
+    ## $ ability_out_labmates_coworkers_team     <chr> "yes", "yes", "yes", "yes", "…
+    ## $ ability_out_mentors                     <chr> "yes", "yes", "yes", "yes", "…
+    ## $ ability_out_medical_school_app          <chr> "yes", "yes", "yes", "yes", "…
+    ## $ ability_out_residency_app               <chr> "yes", "yes", "yes", "yes", "…
+    ## $ ability_out_other                       <chr> "no", "yes", "no", "no", "no"…
+    ## $ ability_out_other_explanation           <chr> NA, "on an outlist", NA, NA, …
+    ## $ protections_out_classmates_peers        <chr> "yes", "yes", "yes", "yes", "…
+    ## $ protections_out_labmates_coworkers_team <chr> "yes", "yes", "yes", "yes", "…
+    ## $ protections_out_mentors                 <chr> "yes", "yes", "yes", "yes", "…
+    ## $ protections_out_medical_school_app      <chr> "yes", "yes", "yes", "yes", "…
+    ## $ protections_out_residency_app           <chr> "yes", "yes", "yes", "yes", "…
+    ## $ protections_out_other                   <chr> "no", "yes", "no", "no", "no"…
+    ## $ protections_out_other_explanation       <chr> NA, "on an outlist", NA, NA, …
 
-In our analyses here, we’ll actually ignore most of these variables and
-focus on just a couple. Specifically, we’re interested in analyzing
-LGBTQ+ medical students’ patterns of “outness” - or disclosing their
-membership to the LGBTQ+ community - in different contexts during
-medical school. We’ll be looking at this data overall and as a function
-of several demographic variables like race, gender, sexual orientation,
-etc.
-
-As a side note, all of this data was derived from a survey conducted by
-the [Medical Student Pride Alliance (MSPA)](https://www.medpride.org/),
-a nonprofit organization that works with medical students who identify
-as LGBTQ+.
+# Visualizations
 
 ## Univariate Demographics report
 
@@ -4278,7 +4227,7 @@ Other
 
 </table>
 
-## Who is “out” - some visualizations
+## Who is “out” in medical school?
 
 With these basics out of the way, we can plot which medical students
 report being comfortable being “out” at different stages of medical
@@ -4430,7 +4379,7 @@ outness_altogether_plot <-
 outness_altogether_plot 
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 This plot is okay, but it’s a little busy, and it doesn’t make a super
 economical use of space. That being said, it does show some interesting
@@ -4608,7 +4557,7 @@ overall_outness_plot <-
 overall_outness_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ``` r
 overall_outness_plot %>% 
@@ -5050,7 +4999,7 @@ so_plot <-
 so_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
 so_plot %>% 
@@ -5099,7 +5048,7 @@ gender_plot <-
 gender_plot 
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 ``` r
 gender_plot %>% 
@@ -5220,7 +5169,7 @@ gender_plot <-
 gender_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ``` r
 gender_plot %>% 
@@ -5251,7 +5200,7 @@ race_plot <-
 race_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 ``` r
 race_plot %>% 
@@ -5287,7 +5236,7 @@ degree_plot <-
 degree_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ``` r
 degree_plot %>% 
@@ -5319,7 +5268,7 @@ year_plot <-
 year_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ``` r
 year_plot %>% 
@@ -5414,6 +5363,10 @@ year_significance_tests
     ## 4 On medical school application                 10.1    0.032     2 "*"         
     ## 5 On application to residency/post-docto…       29.0    0         2 "*"
 
+``` r
+?prop.test
+```
+
 Thus, we can see that the environments in which significant difference
 arose were in students’ relationships with mentors, on their
 applications to medical school, and on their applications to
@@ -5444,7 +5397,7 @@ year_plot <-
 year_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
 
 ``` r
 year_plot %>% 
@@ -5553,7 +5506,7 @@ support_plot <-
 support_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ``` r
 support_plot %>% 
@@ -5655,7 +5608,7 @@ gap_plot <-
 gap_plot 
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 This plot makes it really easy to see that, as we move from the right
 side (the “less professional” side of the plot) to the right side of the
@@ -5783,7 +5736,7 @@ alluvium_plot <-
 alluvium_plot
 ```
 
-![](outness_report_files/figure-gfm/unnamed-chunk-35-1.png)<!-- -->
+![](outness_report_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
 
 ``` r
 alluvium_plot %>% 
@@ -5818,1144 +5771,7 @@ This illustrates that, for some reason, there’s a net movement of
 students towards being less comfortable being “out” from the beginning
 of medical school to the end of medical school.
 
-``` r
-alluvium_counting <- 
- na_data %>% 
-  filter(is_lgbtq == "LGBTQ+") %>% 
-  count(out_medical_school_app, out_residency_app) %>% 
-  arrange(desc(out_medical_school_app, desc(out_residency_app))) %>% 
-  group_by(
-    out_medical_school_app
-  ) %>% 
-  mutate(percent = n / sum(n) * 100)
-
-alluvium_counting
-```
-
-    ## # A tibble: 4 x 4
-    ## # Groups:   out_medical_school_app [2]
-    ##   out_medical_school_app out_residency_app     n percent
-    ##   <chr>                  <chr>             <int>   <dbl>
-    ## 1 yes                    no                  216    61.0
-    ## 2 yes                    yes                 138    39.0
-    ## 3 no                     no                  231    84  
-    ## 4 no                     yes                  44    16
-
-## Putting our plots together using {patchwork}
-
-### Figure 1
-
-``` r
-figure_1a <- 
-  overall_outness_plot + 
-  labs(y = "% of \"out\" students", subtitle = NULL)
-
-figure_1b <- 
-  so_plot + 
-  labs(
-    subtitle = NULL, 
-    y = "% of \"out\" students", 
-    color = "Sexual Orientation", 
-    fill = "Sexual Orientation"
-  )
-
-figure_1c <- 
-  gender_plot + 
-  labs(
-    subtitle = NULL, 
-    y = "% of \"out\" students", 
-    color = "Gender Identity", 
-    fill = "Gender Identity"
-  )
-
-figure_s1a <- 
-  race_plot + 
-  labs(
-    subtitle = NULL, 
-    y = "% of \"out\" students", 
-    color = "Race/Ethnicity", 
-    fill = "Race/Ethnicity"
-  )
-
-figure_s1b <- 
-  year_plot + 
-  labs(
-    subtitle = NULL, 
-    y = "% of \"out\" students", 
-    color = "Training Stage", 
-    fill = "Training Stage"
-  )
-
-figure_s1c <- 
-  degree_plot + 
-  labs(
-    subtitle = NULL, 
-    y = "% of \"out\" students", 
-    color = "Degree", 
-    fill = "Degree"
-  )
-
-layout <- "
-##AAAA###
-##AAAA###
-BBBBCCCCC
-BBBBCCCCC
-"
-
-figure_1 <- 
-  (figure_1a +
-  figure_1b + 
-  figure_1c ) + 
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
-  plot_layout(design = layout) & 
-  theme(
-    axis.text.x = element_text(size = 9),
-    plot.tag = element_text(size = 20)
-  )
-
-
-  
-figure_1 %>% 
-    ggsave(
-    filename = "figure_1_version1.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 11, 
-    height = 8,
-    units = "in"
-  )
-```
-
-``` r
-figure_1 <- 
-  figure_1a / 
-  figure_1b / 
-  figure_1c +   
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") +
-  # plot_layout(design = layout) & 
-  theme(
-    axis.text.x = element_text(size = 9),
-    plot.tag = element_text(size = 20)
-  )
-
-figure_1 %>% 
-    ggsave(
-    filename = "figure_1_version2.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 7, 
-    height = 12,
-    units = "in"
-  )
-```
-
-### Supplementary figure 1
-
-``` r
-figure_s1 <- 
-  figure_s1a / 
-  figure_s1b / 
-  figure_s1c +   
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
-  # plot_layout(design = layout) & 
-  theme(
-    axis.text.x = element_text(size = 9),
-    plot.tag = element_text(size = 20)
-  )
-
-figure_s1 %>% 
-    ggsave(
-    filename = "figure_s1.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 6, 
-    height = 12,
-    units = "in"
-  )
-```
-
-``` r
-alternate_figure_1 <- 
-  wrap_plots(figure_1, figure_s1) + 
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
-  theme(
-    axis.text = element_text(size = 11),
-    axis.title = element_text(size = 12), 
-    legend.text = element_text(size = 11),
-    legend.title = element_text(size = 12, face = "bold"), 
-    plot.tag = element_text(size = 20)
-  )
-
-alternate_figure_1 <- 
-  wrap_plots(figure_1a, figure_1b, figure_s1a, figure_s1c, figure_1c, figure_s1b) + 
-  plot_layout(ncol = 2) + 
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
-  theme(
-    axis.text = element_text(size = 11),
-    axis.title = element_text(size = 12), 
-    legend.text = element_text(size = 11),
-    legend.title = element_text(size = 12, face = "bold"), 
-    plot.tag = element_text(size = 20)
-  )
-
-  
-alternate_figure_1 %>% 
-    ggsave(
-    filename = "figure_1_version3.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 13, 
-    height = 12,
-    units = "in"
-  )
-```
-
-### Figure 2
-
-``` r
-layout <- "
-AAAA
-BBCC
-"
-
-figure_2a <- 
-  support_plot + 
-  labs(caption = NULL)
-
-figure_2b <- 
-  gap_plot + 
-  labs(caption = NULL) + 
-  theme(legend.position = "bottom")
-
-figure_2c <- 
-  alluvium_plot + 
-  labs(subtitle = NULL, caption = NULL)
-
-figure_2 <- 
-  figure_2a +
-  figure_2b + 
-  figure_2c  + 
-  plot_layout(design = layout) + 
-  plot_annotation(tag_levels = 'A', tag_suffix = "", tag_prefix = "  ") &
-  theme(
-    axis.text.x = element_text(size = 10),
-    axis.text.y = element_text(size = 10),
-    axis.title = element_text(size = 12), 
-    legend.text = element_text(size = 11),
-    plot.tag = element_text(size = 20)
-  )
-
-figure_2 %>% 
-    ggsave(
-    filename = "figure_2.pdf", 
-    plot = ., 
-    device = "pdf", 
-    path = figure_out_path, 
-    width = 7.5, 
-    height = 9,
-    units = "in"
-  )
-```
-
-### Table 1
-
-``` r
-demo_table 
-```
-
-<table class="table table-striped table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
-
-<thead>
-
-<tr>
-
-<th style="text-align:left;">
-
-</th>
-
-<th style="text-align:left;">
-
-Full Sample
-
-</th>
-
-<th style="text-align:left;">
-
-Allopathic (MD)
-
-</th>
-
-<th style="text-align:left;">
-
-Osteopathic (DO)
-
-</th>
-
-</tr>
-
-</thead>
-
-<tbody>
-
-<tr>
-
-<td style="text-align:left;font-weight: bold;">
-
-Overall
-
-</td>
-
-<td style="text-align:left;font-weight: bold;">
-
-1162 (100%)
-
-</td>
-
-<td style="text-align:left;font-weight: bold;">
-
-1082 (93.1%)
-
-</td>
-
-<td style="text-align:left;font-weight: bold;">
-
-80 (6.9%)
-
-</td>
-
-</tr>
-
-<tr grouplength="8">
-
-<td colspan="4" style="background-color: #666; color: #fff;">
-
-<strong>Gender</strong>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Cisgender Woman
-
-</td>
-
-<td style="text-align:left;">
-
-652 (51.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-598 (47.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-54 (4.3%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Cisgender Man
-
-</td>
-
-<td style="text-align:left;">
-
-413 (32.6%)
-
-</td>
-
-<td style="text-align:left;">
-
-393 (31%)
-
-</td>
-
-<td style="text-align:left;">
-
-20 (1.6%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Gender-expansive
-
-</td>
-
-<td style="text-align:left;">
-
-96 (7.6%)
-
-</td>
-
-<td style="text-align:left;">
-
-90 (7.1%)
-
-</td>
-
-<td style="text-align:left;">
-
-6 (0.5%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Genderqueer/Gender non-conforming
-
-</td>
-
-<td style="text-align:left;">
-
-72 (5.7%)
-
-</td>
-
-<td style="text-align:left;">
-
-67 (5.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-5 (0.4%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Transgender Man
-
-</td>
-
-<td style="text-align:left;">
-
-13 (1%)
-
-</td>
-
-<td style="text-align:left;">
-
-13 (1%)
-
-</td>
-
-<td style="text-align:left;">
-
-0 (0%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Agender
-
-</td>
-
-<td style="text-align:left;">
-
-11 (0.9%)
-
-</td>
-
-<td style="text-align:left;">
-
-11 (0.9%)
-
-</td>
-
-<td style="text-align:left;">
-
-0 (0%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Another Gender Identity
-
-</td>
-
-<td style="text-align:left;">
-
-7 (0.6%)
-
-</td>
-
-<td style="text-align:left;">
-
-6 (0.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-1 (0.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Transgender Woman
-
-</td>
-
-<td style="text-align:left;">
-
-3 (0.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-3 (0.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-0 (0%)
-
-</td>
-
-</tr>
-
-<tr grouplength="9">
-
-<td colspan="4" style="background-color: #666; color: #fff;">
-
-<strong>Sexual Orientation</strong>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Straight/Heterosexual
-
-</td>
-
-<td style="text-align:left;">
-
-521 (36%)
-
-</td>
-
-<td style="text-align:left;">
-
-498 (34.4%)
-
-</td>
-
-<td style="text-align:left;">
-
-23 (1.6%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Gay
-
-</td>
-
-<td style="text-align:left;">
-
-239 (16.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-221 (15.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-18 (1.2%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Bisexual
-
-</td>
-
-<td style="text-align:left;">
-
-224 (15.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-208 (14.4%)
-
-</td>
-
-<td style="text-align:left;">
-
-16 (1.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Queer
-
-</td>
-
-<td style="text-align:left;">
-
-215 (14.9%)
-
-</td>
-
-<td style="text-align:left;">
-
-200 (13.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-15 (1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Pansexual
-
-</td>
-
-<td style="text-align:left;">
-
-82 (5.7%)
-
-</td>
-
-<td style="text-align:left;">
-
-72 (5%)
-
-</td>
-
-<td style="text-align:left;">
-
-10 (0.7%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Lesbian
-
-</td>
-
-<td style="text-align:left;">
-
-82 (5.7%)
-
-</td>
-
-<td style="text-align:left;">
-
-70 (4.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-12 (0.8%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Questioning
-
-</td>
-
-<td style="text-align:left;">
-
-37 (2.6%)
-
-</td>
-
-<td style="text-align:left;">
-
-33 (2.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-4 (0.3%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Asexual
-
-</td>
-
-<td style="text-align:left;">
-
-34 (2.4%)
-
-</td>
-
-<td style="text-align:left;">
-
-31 (2.1%)
-
-</td>
-
-<td style="text-align:left;">
-
-3 (0.2%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Another Sexual Orientation
-
-</td>
-
-<td style="text-align:left;">
-
-12 (0.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-11 (0.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-1 (0.1%)
-
-</td>
-
-</tr>
-
-<tr grouplength="7">
-
-<td colspan="4" style="background-color: #666; color: #fff;">
-
-<strong>Race/Ethnicity</strong>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-White/Caucasian
-
-</td>
-
-<td style="text-align:left;">
-
-870 (67.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-812 (62.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-58 (4.5%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Asian
-
-</td>
-
-<td style="text-align:left;">
-
-184 (14.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-169 (13.1%)
-
-</td>
-
-<td style="text-align:left;">
-
-15 (1.2%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Latino or Hispanic
-
-</td>
-
-<td style="text-align:left;">
-
-127 (9.8%)
-
-</td>
-
-<td style="text-align:left;">
-
-113 (8.7%)
-
-</td>
-
-<td style="text-align:left;">
-
-14 (1.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Black or African American
-
-</td>
-
-<td style="text-align:left;">
-
-71 (5.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-71 (5.5%)
-
-</td>
-
-<td style="text-align:left;">
-
-0 (0%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Another Race
-
-</td>
-
-<td style="text-align:left;">
-
-18 (1.4%)
-
-</td>
-
-<td style="text-align:left;">
-
-18 (1.4%)
-
-</td>
-
-<td style="text-align:left;">
-
-0 (0%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-American Indian or Alaska Native
-
-</td>
-
-<td style="text-align:left;">
-
-13 (1%)
-
-</td>
-
-<td style="text-align:left;">
-
-12 (0.9%)
-
-</td>
-
-<td style="text-align:left;">
-
-1 (0.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Native Hawaiian or Other Pacific Islander
-
-</td>
-
-<td style="text-align:left;">
-
-9 (0.7%)
-
-</td>
-
-<td style="text-align:left;">
-
-4 (0.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-5 (0.4%)
-
-</td>
-
-</tr>
-
-<tr grouplength="4">
-
-<td colspan="4" style="background-color: #666; color: #fff;">
-
-<strong>Year in School</strong>
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Pre-Clinical Student
-
-</td>
-
-<td style="text-align:left;">
-
-711 (61.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-663 (57.1%)
-
-</td>
-
-<td style="text-align:left;">
-
-48 (4.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Clinical Student
-
-</td>
-
-<td style="text-align:left;">
-
-374 (32.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-344 (29.6%)
-
-</td>
-
-<td style="text-align:left;">
-
-30 (2.6%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Research
-
-</td>
-
-<td style="text-align:left;">
-
-50 (4.3%)
-
-</td>
-
-<td style="text-align:left;">
-
-49 (4.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-1 (0.1%)
-
-</td>
-
-</tr>
-
-<tr>
-
-<td style="text-align:left; padding-left:  2em;" indentlevel="1">
-
-Other
-
-</td>
-
-<td style="text-align:left;">
-
-26 (2.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-25 (2.2%)
-
-</td>
-
-<td style="text-align:left;">
-
-1 (0.1%)
-
-</td>
-
-</tr>
-
-</tbody>
-
-</table>
+# Misc
 
 ## Some qualitative thoughts on “outness”
 
@@ -9691,11 +8507,3 @@ Friends
 </tbody>
 
 </table>
-
-## Number of words in manuscript
-
-``` r
-274 + 331 + 364 + 194
-```
-
-    ## [1] 1163

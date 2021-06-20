@@ -1604,7 +1604,8 @@ variable_recode <-
       "I feel supported by the LGBTQ+ medical student group at my medical school."
     )
 
-na_data %>% 
+interest_plot <- 
+  na_data %>% 
   group_by(is_lgbtq) %>% 
   select(starts_with("interest_"), -interest_lgbtq_other) %>%
   pivot_longer(
@@ -1653,6 +1654,8 @@ na_data %>%
     fill = NULL,
     caption = str_glue("N = {n_total}")
   )  
+
+interest_plot
 ```
 
 
@@ -1797,4 +1800,35 @@ na_data %>%
   select(Intersectionality = intersectionality) %>% 
   knitr::kable()
 ```
+
+
+```{r}
+na_data %>%
+  select(satisfaction_lgbtq_meded, is_lgbtq) %>% 
+  drop_na() %>% 
+  count(is_lgbtq, satisfaction_lgbtq_meded) %>% 
+  group_by(is_lgbtq) %>% 
+  mutate(group_percentage = n / sum(n) * 100)
+
+na_data %>%
+  select(satisfaction_lgbtq_meded, is_lgbtq) %>% 
+  drop_na() %>% 
+  count(satisfaction_lgbtq_meded) %>% 
+  mutate(group_percentage = n / sum(n) * 100)
+
+straight_mean <- 
+  na_data %>% 
+  group_by(is_lgbtq) %>% 
+  summarize(satisfaction_mean = mean(satisfaction_lgbtq_meded, na.rm = TRUE)) %>% 
+  filter(is_lgbtq == "Non-LGBTQ+") %>% 
+  pull(satisfaction_mean)
+
+na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  summarize(percent_lower = mean(satisfaction_lgbtq_meded < straight_mean, na.rm = TRUE))
+
+```
+
+
+
 

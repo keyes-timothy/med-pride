@@ -104,10 +104,14 @@ I've already done some data cleaning in previous scripts, but there are still a 
 First, we want to remove people who did not consent to the survey, since we can't use their information anyway. We will also remove students who are not in schools within the U.S. or who did not provide the name of the school that they attend. 
 
 ```{r}
+before <- nrow(na_data)
+
 na_data <- 
   na_data %>% 
   filter(consent == "yes", school_attend != "International") %>% 
   drop_na(school_attend)
+
+after <- nrow(na_data)
 ```
 
 And then we can select out some variables that we don't need. 
@@ -183,6 +187,7 @@ na_data <-
     med_school_year,
     degree_type,
     is_urm,
+    sex,
     starts_with("so_"), 
     starts_with("gender_"), 
     starts_with("race_"), 
@@ -236,6 +241,42 @@ na_data %>%
 ```
 
 From this, we can see that we're working with a "convenience sample" - it looks like the survey was distributed to pretty much whoever MSPA could reach, with some schools responding quite a bit more than others. So, our observations here are potentially interesting, but we should consider this study (even with an N > 1000) to be on the exploratory side. 
+
+### Response Rate calculation
+
+```{r}
+na_data %>%
+  count(school_attend) %>% 
+  slice_max(order_by = n, n = 25)
+```
+
+
+```{r}
+bi <- 0.021
+gay <- 0.031
+trans <- 0.003 
+total_perc <- bi + gay + trans
+estimated_total_enrollment_2019 <- 91247
+
+# md respondents who are lgbtq+ 
+lgbtq_res <- 
+  na_data %>% 
+  count(is_lgbtq, degree_type) %>% 
+  filter(is_lgbtq == "LGBTQ+", degree_type == "allopathic") %>% 
+  pull(n)
+
+total_lgbtq_aamc <- total_perc * estimated_total_enrollment_2019
+
+rr <- 
+  (lgbtq_res / total_lgbtq_aamc) %>% 
+  round(3)
+
+print(str_c(rr * 100, "%"))
+
+
+
+```
+
 
 ### All other demographic variables
 
@@ -367,11 +408,47 @@ demo_year <-
 
 ```
 
+Fourth, we can compute the how many MD vs. DO students were assigned male or female sex at birth. 
+
+```{r}
+demo_sex <- 
+  na_data %>% 
+  group_by(degree_type) %>% 
+  select(sex) %>% 
+  count(sex, name = "count") %>% 
+  drop_na() %>% 
+  ungroup() %>% 
+  mutate(percentage = (count / sum(count) * 100) %>% round(1)) %>% 
+  bind_rows(
+    na_data %>%
+      count(sex, name = "count") %>% 
+      drop_na() %>% 
+      mutate(
+        percentage = (count / sum(count) * 100) %>% round(1),
+        degree_type = "Full Sample"
+      )
+  ) %>% 
+  transmute(
+    degree_type,
+    variable = str_to_title(sex), 
+    variable_type = "sex",
+    count, 
+    percentage
+  )
+
+demo_sex
+```
+
+
+
 Finally, we can combine the 2 tibbles above and make our table using `kable()` with some styling options. Note that in the following table, all percentages are reported as the percentage of the **total** sample (all respondents). Categories in the same heading should not add up to 100% due to the overlapping nature of a lot of the terminology we're using here. 
 
 ```{r}
+my_footnote <- 
+  "Because gender, sexual orientation, and race/ethnicity categories are not mutually exclusive, all \n percentages are reported relative to the total number of respondents in the study."
+
 demo_combined <- 
-  bind_rows(demo_breakdown, demo_year) %>% 
+  bind_rows(demo_sex, demo_breakdown, demo_year) %>% 
   pivot_longer(
     cols = c(count, percentage), 
     names_to = "my_variable", 
@@ -386,7 +463,7 @@ demo_combined <-
     variable_type = 
       factor(
         variable_type, 
-        levels = c("gender", "so", "race", "med_school_year")
+        levels = c("gender", "sex", "so", "race", "med_school_year")
       )
   ) %>% 
   arrange(variable_type, desc(allopathic_count)) %>% 
@@ -404,15 +481,26 @@ demo_table <-
   kable(col.names = c(" ", colnames(.)[-1])) %>% 
   kable_styling(
     bootstrap_options = c("striped", "condensed"),
-    full_width = F
+    full_width = FALSE
   ) %>%
-  row_spec(1, bold = T) %>% 
+  row_spec(1, bold = TRUE) %>% 
   pack_rows("Gender", 2, 9, label_row_css = "background-color: #666; color: #fff;") %>%
-  pack_rows("Sexual Orientation", 10, 18, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Race/Ethnicity", 19, 25, label_row_css = "background-color: #666; color: #fff;") %>% 
-  pack_rows("Year in School", 26, 29, label_row_css = "background-color: #666; color: #fff;")
+  pack_rows(
+    "Sex Assigned At Birth",
+    10, 
+    11,
+    label_row_css = "background-color: #666; color: #fff;"
+  ) %>% 
+  pack_rows("Sexual Orientation", 12, 20, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Race/Ethnicity", 21, 27, label_row_css = "background-color: #666; color: #fff;") %>% 
+  pack_rows("Year in School", 28, 31, label_row_css = "background-color: #666; color: #fff;") %>% 
+  add_footnote(
+    label = my_footnote,
+    notation = "number"
+  )
 
-demo_table
+demo_table %>% 
+  as_image(zoom = 4)
 ```
 
 
@@ -568,10 +656,18 @@ q_test <-
   filter(is_lgbtq == "LGBTQ+") %>% 
   select(starts_with("out_")) %>% 
   select(-contains("out_other")) %>% 
-  table() %>% 
-  as.data.frame() %>% 
-  as.matrix() %>% 
-  CochranQTest() %>% 
+  mutate(id = 1:nrow(.)) %>% 
+  pivot_longer(
+    cols = -id, 
+    names_to = "context", 
+    values_to = "response", 
+    names_prefix = "out_"
+  ) %>% 
+  mutate(
+    context = as.factor(context), 
+    response = as.factor(response)
+  ) %>% 
+  CochranQTest(response ~ context | id, data = .) %>% 
   tidy()
 
 q <- 
@@ -579,7 +675,7 @@ q <-
   round(1)
 
 p_value <- 
-  q_test$p.value 
+  q_test$p.value
 
 p_value <- 
   if_else(p_value < 0.001, formatC(p_value, format = "e", digits = 2), as.character(round(p_value, 2)))
@@ -669,7 +765,7 @@ overall_outness_plot <-
     y = "Percentage of \'out\' students", 
     fill = NULL, 
     color = NULL, 
-    caption = bquote("Q"[.(df)] ~ "=" ~ .(q) ~ "; " ~ "p =" ~ .(p_value))
+    caption = bquote("Q"[.(df)] ~ "=" ~ .(q) ~ "; " ~ "p < 0.001")
   )
 
 overall_outness_plot
@@ -1119,15 +1215,45 @@ gender_subtitle <- "LGBTQ+ student \'outness\' by gender"
 gender_plot <- 
   plot_outness(
     my_var_type = "gender", 
+    irrelevant_levels =  gender_irrelevant_levels, 
+    subtitle = gender_subtitle
+  )
+
+gender_plot
+
+gender_plot %>% 
+  ggsave(
+    filename = "gender_plot_supplemental.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7, 
+    height = 4.5,
+    units = "in"
+  )
+  
+```
+
+In this case, note that the "Gender-Expansive" category includes transgender men, transgender women, agender people, and genderqueer/gender-nonconforming/nonbinary people. They are grouped together because each of these categories on their own had a relatively small number of respondents.
+
+
+
+```{r}
+gender_irrelevant_levels <- c("man", "woman", "gender-expansive", "another") 
+gender_subtitle <- "LGBTQ+ student \'outness\' by gender"
+
+gender_plot_supp <- 
+  plot_outness(
+    my_var_type = "gender", 
     irrelevant_levels = gender_irrelevant_levels, 
     subtitle = gender_subtitle
   )
 
-gender_plot 
+gender_plot_supp
 
-gender_plot %>% 
+gender_plot_supp %>% 
   ggsave(
-    filename = "gender_plot.pdf", 
+    filename = "gender_plot_supplemental.pdf", 
     plot = ., 
     device = "pdf", 
     path = figure_out_path, 
@@ -1138,7 +1264,6 @@ gender_plot %>%
   
 ```
 
-In this case, note that the "Gender-Expansive" category includes transgender men, transgender women, agender people, and genderqueer/gender-nonconforming/nonbinary people. They are grouped together because each of these categories on their own had a relatively small number of respondents.
 
 In this case, the overall $\chi^2$-test was just barely significant at the level of $\alpha = 0.05$. We can use follow-up chi-squared tests to see which gender categories differ from one another. 
 
@@ -1443,14 +1568,14 @@ support_plot <-
       label = str_glue("{num}%", num = percent_out %>% round(0))
     ), 
     size = 4, 
-    position = position_dodge(width = 0.91), 
+    position = position_dodge(width = 0.8), 
     fontface = "bold", 
     vjust = -0.3
   ) + 
   geom_text(
     aes(y = percent_out + 8, group = variable, label = significance),
     size = 6, 
-    position = position_dodge(width = 0.91)
+    position = position_dodge(width = 0.8)
   ) + 
   scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
   scale_y_continuous(
@@ -1461,7 +1586,7 @@ support_plot <-
   theme_bw() + 
   theme(
     legend.position = "bottom", 
-    axis.text.x = element_text(size = 10, angle = 30, hjust = 1),
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1)
   ) + 
   labs(
     x = NULL, 
@@ -1495,7 +1620,7 @@ gap_frame <-
   outness_data %>% 
   # remove the following line if you want to include non-LGBTQ+ students
   filter(is_lgbtq == "LGBTQ+") %>% 
-  filter(!(variable == "Out (or plan to be out)" & is_lgbtq == "Non-LGBTQ+")) %>% 
+  #filter(!(variable == "Out (or plan to be out)" & is_lgbtq == "Non-LGBTQ+")) %>% 
   group_by(variable, context) %>% 
   summarize(prop = sum(is_out == "yes") / n()) %>% 
   filter(variable != "Support ability to be out") %>% 
@@ -1558,7 +1683,323 @@ gap_plot
 
 This plot makes it really easy to see that, as we move from the right side (the "less professional" side of the plot) to the right side of the plot (the "more professional side"), the disparity between the proportion of "out" students and the number of supportive students gets progressively larger. 
 
+We can then delve into the SGM-specific and non-SGM-specific opinions about whether or not students should be able to be out. 
+
+```{r}
+num_lgbtq <- sum(na_data$is_lgbtq == "LGBTQ+", na.rm = TRUE)
+
+support_plot_sgm <- 
+  outness_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  group_by(variable, context) %>%
+  summarize(prop = sum(is_out == "yes") / n()) %>%
+  mutate(
+    environment = factor(context, levels = context_order), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall", 
+    significance = if_else(str_detect(variable, "or plan to be out"), "*", "")
+  ) %>% 
+  ggplot(aes(x = environment, y = percent_out)) + 
+  geom_col(
+    aes(fill = variable), 
+    position = "dodge", 
+    color = "black", 
+    size = 0.6
+  ) +
+  geom_text(
+    aes(
+      group = variable, 
+      label = str_glue("{num}%", num = percent_out %>% round(0))
+    ), 
+    size = 4, 
+    position = position_dodge(width = 0.91), 
+    fontface = "bold", 
+    vjust = -0.3
+  ) + 
+  geom_text(
+    aes(y = percent_out + 9, group = variable, label = significance),
+    size = 6, 
+    position = position_dodge(width = 0.91)
+  ) + 
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1, scale = 1), 
+    limits = c(NA, 108)
+  ) + 
+  scale_fill_tableau() + 
+  theme_bw() + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1),
+  ) + 
+  labs(
+    x = NULL, 
+    y = "% of students", 
+    fill = NULL,
+    caption = str_glue("N = {num_lgbtq}")
+  )
+
+support_plot_sgm
+
+support_plot_sgm %>% 
+  ggsave(
+    filename = "support_plot_sgm.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 7.25, 
+    height = 5,
+    units = "in"
+  )
+
+```
+
+
+```{r}
+outness_data <- 
+  outness_data %>% 
+  mutate(
+    is_sgm = 
+      is_lgbtq %>% 
+      fct_recode(SGM = "LGBTQ+", `Not SGM` = "Non-LGBTQ+")
+  )
+```
+
+
+```{r}
+# statistical testing 
+# test proportion differences in supporting outness across 
+# contexts between SGM and non-SGM people
+support_comparison_chis <- 
+  tibble(environment = context_order) %>% 
+  mutate(
+    chi_tests = 
+      map(
+        .x = environment, 
+        .f = ~ 
+          table(
+            outness_data %>%
+              filter(context == .x) %>% 
+              filter(variable == "Support ability to be out") %>% 
+              pull(is_sgm), 
+            outness_data %>%
+              filter(context == .x) %>% 
+              filter(variable == "Support ability to be out") %>% 
+              pull(is_out) 
+          ) %>% 
+          prop.test() %>% 
+          tidy()
+      )
+  ) %>% 
+  unnest(chi_tests) %>% 
+  mutate(p.value = p.value * 10) %>% 
+  transmute(
+    environment, 
+    chi_squared = round(statistic, 2),
+    # note the bonferonni correction in the line below
+    p_value = formatC(pmin(p.value, 1), digits = 1, format = "e"), 
+    df = parameter, 
+    significance = if_else(p.value < 0.05, "*", "")
+  ) %>% 
+  mutate(is_sgm = "Not SGM")
+
+support_comparison_chis
+```
+
+
+```{r}
+support_plot_comparison <- 
+  outness_data %>% 
+  filter(variable == "Support ability to be out") %>% 
+  group_by(is_sgm, variable, context) %>%
+  summarize(prop = sum(is_out == "yes") / n()) %>%
+  mutate(
+    environment = factor(context, levels = context_order), 
+    is_sgm = factor(is_sgm, levels = c("SGM", "Not SGM")), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall", 
+    #significance = if_else(str_detect(variable, "or plan to be out"), "*", "")
+  ) %>% 
+  left_join(support_comparison_chis, by = c("context" = "environment", "is_sgm")) %>% 
+  mutate(is_sgm = factor(is_sgm, levels = c("SGM", "Not SGM"))) %>% 
+  ggplot(aes(x = environment, y = percent_out)) + 
+  geom_col(
+    aes(fill = is_sgm), 
+    position = "dodge", 
+    color = "black", 
+    size = 0.6
+  ) +
+  geom_text(
+    aes(
+      group = is_sgm, 
+      label = str_glue("{num}%", num = percent_out %>% round(0))
+    ), 
+    size = 3, 
+    position = position_dodge(width = 0.9), 
+    fontface = "bold", 
+    vjust = -0.3
+  ) + 
+  geom_text(
+    aes(y = percent_out + 10, group = is_sgm, label = significance),
+    size = 6,
+    position = position_dodge(width = 0.9)
+  ) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1, scale = 1), 
+    limits = c(NA, 108)
+  ) + 
+  #facet_grid(rows = vars(variable)) +
+  scale_fill_tableau() + 
+  theme_bw() + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1),
+    plot.subtitle = element_text(size = 10)
+  ) + 
+  labs(
+    subtitle = 
+      "In medical school, in which contexts do you feel trainees should be able to be \"out\" with regard to their sexual orientation or gender identity?" %>% 
+      str_wrap(width = 60),
+    x = NULL, 
+    y = "% of students", 
+    fill = NULL,
+    caption = str_glue("N = {nrow(na_data)}")
+  )
+
+support_plot_comparison
+
+```
+
+```{r}
+# statistical testing 
+# test proportion differences in believing in protections across 
+# contexts between SGM and non-SGM people
+protections_comparison_chis <- 
+  tibble(environment = context_order) %>% 
+  mutate(
+    chi_tests = 
+      map(
+        .x = environment, 
+        .f = ~ 
+          table(
+            outness_data %>%
+              filter(context == .x) %>% 
+              filter(variable == "Support protections for outness") %>% 
+              pull(is_sgm), 
+            outness_data %>%
+              filter(context == .x) %>% 
+              filter(variable == "Support protections for outness") %>% 
+              pull(is_out) 
+          ) %>% 
+          prop.test() %>% 
+          tidy()
+      )
+  ) %>% 
+  unnest(chi_tests) %>% 
+  mutate(p.value = p.value * 10) %>% 
+  transmute(
+    environment, 
+    chi_squared = round(statistic, 2),
+    # note the bonferonni correction in the line below
+    p_value = formatC(pmin(p.value, 1), digits = 1, format = "e"), 
+    df = parameter, 
+    significance = if_else(p.value < 0.05, "*", "")
+  ) %>% 
+  mutate(is_sgm = "Not SGM")
+
+protections_comparison_chis
+```
+
+
+
+```{r}
+protections_plot_comparison <- 
+  outness_data %>% 
+  filter(variable == "Support protections for outness") %>% 
+  group_by(is_sgm, variable, context) %>%
+  summarize(prop = sum(is_out == "yes") / n()) %>%
+  mutate(
+    environment = factor(context, levels = context_order), 
+    percent_out = (prop * 100) %>% round(1), 
+    identity = "overall", 
+    #significance = if_else(str_detect(variable, "or plan to be out"), "*", "")
+  ) %>% 
+  left_join(protections_comparison_chis, by = c("context" = "environment", "is_sgm")) %>% 
+  mutate(is_sgm = factor(is_sgm, levels = c("SGM", "Not SGM"))) %>% 
+  ggplot(aes(x = environment, y = percent_out)) + 
+  geom_col(
+    aes(fill = is_sgm), 
+    position = "dodge", 
+    color = "black", 
+    size = 0.6
+  ) +
+  geom_text(
+    aes(
+      group = is_sgm, 
+      label = str_glue("{num}%", num = percent_out %>% round(0))
+    ), 
+    size = 3, 
+    position = position_dodge(width = 0.9), 
+    fontface = "bold", 
+    vjust = -0.3
+  ) + 
+  geom_text(
+    aes(y = percent_out + 10, group = is_sgm, label = significance),
+    size = 6,
+    position = position_dodge(width = 0.9)
+  ) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 30)) + 
+  scale_y_continuous(
+    labels = scales::label_percent(accuracy = 1, scale = 1), 
+    limits = c(NA, 108)
+  ) + 
+  #facet_grid(rows = vars(variable)) +
+  scale_fill_tableau() + 
+  theme_bw() + 
+  theme(
+    legend.position = "bottom", 
+    axis.text.x = element_text(size = 10, angle = 30, hjust = 1),
+    plot.subtitle = element_text(size = 10)
+  ) + 
+  labs(
+    subtitle = 
+      "In which contexts do you feel medical schools should have protections in place so that trainees can be \"out\" with regard to their sexual orientation/gender identity?" %>% 
+      str_wrap(width = 60),
+    x = NULL, 
+    y = "% of students", 
+    fill = NULL,
+    caption = str_glue("N = {nrow(na_data)}")
+  )
+
+protections_plot_comparison
+```
+
+```{r}
+new_figure <- 
+  support_plot_comparison +
+  protections_plot_comparison
+
+new_figure
+
+new_figure %>% 
+    ggsave(
+    filename = "new_figure.pdf", 
+    plot = ., 
+    device = "pdf", 
+    path = figure_out_path, 
+    width = 8.5, 
+    height = 4.5,
+    units = "in"
+  )
+  
+```
+
+Significance testing for differences in number of lgbtq+ people "out" compared to how many want to be out/support protections for outness.
+
 Using a simple `prop.test` test, we can also confirm that all of these gaps are significant (even the first one).
+
+Among queer people, are more queer people supportive of their ability to be out than are actually out in each context? 
 
 ```{r}
 outness_vs_support_tests <- 
@@ -1569,31 +2010,72 @@ outness_vs_support_tests <-
         .x = environment, 
         .f = ~ 
           table(
-            outness_data %>%
+            outness_data %>% 
               filter(is_lgbtq == "LGBTQ+") %>% 
               filter(context == .x) %>% 
-              filter(variable != "Support ability to be out") %>% 
+              #filter(variable != "Support protections for outness") %>% 
               pull(variable), 
-            outness_data %>%
-              filter(context == .x) %>% 
+            outness_data %>% 
               filter(is_lgbtq == "LGBTQ+") %>% 
-              filter(variable != "Support ability to be out") %>% 
-              pull(is_out) 
+              filter(context == .x) %>% 
+              #filter(variable != "Support protections for outness") %>% 
+              pull(is_out)  
           ) %>% 
           prop.test() %>% 
           tidy()
       )
   ) %>% 
   unnest(chi_tests) %>% 
+  mutate(p.value = p.value * 5) %>% 
   transmute(
     environment, 
     chi_squared = round(statistic, 2),
     # note the bonferonni correction in the line below
-    p_value = formatC(p.value * 5, digits = 1, format = "e"), 
-    df = parameter 
+    p_value = formatC(p.value, digits = 1, format = "e"), 
+    df = parameter, 
+    significance = if_else(p.value < 0.05, "*", "") 
   )
 
 outness_vs_support_tests
+```
+
+
+```{r}
+outness_vs_protections_tests <- 
+  tibble(environment = context_order) %>% 
+  mutate(
+    chi_tests = 
+      map(
+        .x = environment, 
+        .f = ~ 
+          table(
+            outness_data %>% 
+              filter(is_lgbtq == "LGBTQ+") %>% 
+              filter(context == .x) %>% 
+              filter(variable != "Support ability to be out") %>% 
+              pull(variable), 
+            outness_data %>% 
+              filter(is_lgbtq == "LGBTQ+") %>% 
+              filter(context == .x) %>% 
+              filter(variable != "Support ability to be out") %>% 
+              pull(is_out)  
+          ) %>% 
+          prop.test() %>% 
+          tidy()
+      )
+  ) %>% 
+  unnest(chi_tests) %>% 
+  # note the bonferonni correction in the line below
+  mutate(p.value = p.value * 5) %>% 
+  transmute(
+    environment, 
+    chi_squared = round(statistic, 2),
+    p_value = formatC(p.value, digits = 1, format = "e"), 
+    df = parameter, 
+    significance = if_else(p.value < 0.05, "*", "") 
+  )
+
+outness_vs_protections_tests
 ```
 
 
@@ -1960,7 +2442,7 @@ BBCC
 "
 
 figure_2a <- 
-  support_plot + 
+  support_plot_sgm + 
   labs(caption = NULL)
 
 figure_2b <- 
@@ -1999,6 +2481,13 @@ figure_2 %>%
   
 ```
 
+
+
+
+
+
+
+---------------------
 
 ```{r, include = FALSE}
 ### Table 1
@@ -2069,7 +2558,7 @@ p_values <- pmin(p_values * 10, 1)
 
 p_values
 
-chi_squared_values 
+chi_squared_values
 ```
 
 
@@ -2173,5 +2662,117 @@ na_data %>%
 ```
 
 
+```{r}
+find_outness_relationship <- function(variable) {
+  my_table <- 
+    table(
+      na_data %>% 
+        filter(is_lgbtq == "LGBTQ+") %>% 
+        pull(out_residency_app), 
+      na_data %>% 
+        filter(is_lgbtq == "LGBTQ+") %>% 
+        pull({{variable}})
+    )
+  
+  chi_test <- 
+    my_table %>% 
+    chisq.test()
+  
+  return(list(table = my_table, chi = chi_test))
+}
+```
 
+
+
+```{r}
+out_plot <- function(variable) {
+  na_data %>% 
+  filter(is_lgbtq == "LGBTQ+") %>% 
+  count(out_residency_app, {{variable}}) %>% 
+  drop_na() %>% 
+  group_by(out_residency_app) %>% 
+  mutate(prop = n / sum(n)) %>% 
+  ggplot(aes(x = out_residency_app, y = prop, fill = {{variable}})) + 
+  geom_col() + 
+  coord_flip()
+}
+
+out_plot(is_urm)
+
+```
+
+
+```{r}
+find_outness_relationship(school_affinity_group_involved)
+```
+
+
+
+```{r}
+find_outness_relationship(out_classmates_peers)
+
+out_plot(out_classmates_peers)
+```
+
+```{r}
+find_outness_relationship(school_activities_advocacy)
+
+out_plot(school_activities_advocacy)
+```
+
+
+```{r}
+library(tidymodels)
+
+model_data <- 
+  na_data %>% 
+  select(
+    out_residency_app,
+    #starts_with("gender"), 
+    #starts_with("so_"), 
+    #starts_with("race_"), 
+    starts_with("school_affinity"), 
+    starts_with("school_activities"), 
+    starts_with("satisfaction_"), 
+    #state, 
+    degree_type
+  ) %>% 
+  select(
+    -ends_with("_description"), 
+    -ends_with("explanation"), 
+    -ends_with("_benefit")
+  ) %>% 
+  mutate(
+    across(where(is.character), as.factor)
+  ) 
+
+
+model_data
+
+```
+
+
+```{r, eval = FALSE}
+outness_model <- 
+  logistic_reg() %>% 
+  set_engine("glmnet")
+
+model_data
+
+outness_model <-
+  fit_xy(
+    outness_model, 
+    y = pull(model_data, out_residency_app), 
+    x = select(model_data, -out_residency_app), 
+  )
+
+outness_model %>% 
+  tidy() %>% 
+  arrange(-estimate)
+
+outness_model %>% 
+  multi_predict(model_data) %>% 
+  mutate(id = 1:nrow(.)) %>% 
+  unnest()
+```
 

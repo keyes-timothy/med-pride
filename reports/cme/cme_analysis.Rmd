@@ -1,5 +1,6 @@
 ---
 title: "Teaching LGBTQ+ Health Data analysis"
+date: "`r Sys.Date()`"
 output: 
     github_document:
       toc: TRUE
@@ -10,7 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE, dpi = 300, warning = FALSE, message = FALSE)
 ```
 
-# setup
+# Setup
 
 ```{r}
 # libraries
@@ -21,11 +22,31 @@ library(ggalluvial)
 library(tidytext)
 
 # paths 
-registrant_path <- 
+registrant_path <- # Not updated yet
   here::here("data-raw", "cme", "registrants.csv")
 
 metadata_path <- 
-  here::here("data-raw", "cme", "registration_metadata.pdf")
+  here::here("data-raw", "cme_2023", "registration_metadata.pdf")
+
+new_pretest_path <- 
+  here::here("data-raw", "cme_2023", "pre-test_percentage-based_results.xlsx")
+
+new_posttest_path <- 
+  here::here("data-raw", "cme_2023", "post-test_percentage-based_results.xlsx")
+
+teddy_path <- 
+  here::here("data-raw", "cme_2023", "teddy_text_responses.pdf")
+
+carla_path <- 
+  here::here("data-raw", "cme_2023", "carla_text_responses.pdf")
+
+jesse_path <- 
+  here::here("data-raw", "cme_2023", "jesse_text_responses.pdf")
+
+cme_path <- 
+  here::here("data-raw", "cme_2023", "cme_evals.xlsx")
+
+# old paths
 
 test_path <- 
   here::here("data-raw", "cme", "tests.csv")
@@ -39,10 +60,10 @@ carla_path <-
 jesse_path <- 
   here::here("data-raw", "cme", "jesse_text_responses.pdf")
 
+
 # globals
 
-launch_date <-
-  NULL
+launch_date <- lubridate::dmy("27-03-2021")
 
 course_team <- 
   c(
@@ -50,8 +71,7 @@ course_team <-
     "Shana Zucker", "Timothy Keyes", "William Bottini"
   )
 
-our_title <- 
-  "Teaching LGBTQ+ Health"
+our_title <- "Teaching LGBTQ+ Health"
 
 teddy_stem <- 
   "Teddy Teaching Strategies : Entry # [:digit:]+\n\nPlease share your ideas in the text box below before advancing to the next module. We recommend that you copy and paste your entry into\na separate file for later use before submitting.\n\n"
@@ -62,12 +82,13 @@ jesse_stem <-
 carla_stem <- 
   "Carla Teaching Strategies : Entry # [:digit:]+\n\nPlease share your ideas in the text box below before advancing to the next module. We recommend that you copy and paste your entry into\na separate file for later use before submitting."
 
+passing_score <- 8L
 ```
 
 
-# read in data
+# Read in data
 
-## registrants
+## Registrants
 
 ```{r, warning = FALSE, message = FALSE}
 registrants <- 
@@ -75,9 +96,12 @@ registrants <-
   read_csv() %>% 
   janitor::clean_names() %>% 
   filter(!(name %in% course_team))
+
+colnames(registrants)
+nrow(registrants)
 ```
 
-## metadata
+## Metadata
 
 ```{r}
 metadata_string <- 
@@ -111,74 +135,179 @@ metadata <-
       str_trim()
   )
 
+colnames(metadata)
+nrow(metadata)
 ```
 
 
-## assessments 
+## Assessments 
 
 ```{r}
+# old format 
 tests <- 
   test_path %>% 
   read_csv() %>% 
   janitor::clean_names() %>%
   filter(course_title == our_title) %>% 
   mutate(
-    quiz_title = str_remove(quiz_title, pattern = "Teaching LGBTQ\\+ Health:?[:space:]")
+    quiz_title = 
+      str_remove(quiz_title, pattern = "Teaching LGBTQ\\+ Health:?[:space:]")
   )
-
 ```
 
-## free-text case reflections
 
-is there a way to match these with respondent `user_id`'s?
+
+```{r}
+# new format
+pre <- 
+  new_pretest_path |> 
+  readxl::read_excel() |> 
+  drop_na() |> 
+  janitor::clean_names() |> 
+  mutate(
+    results = as.integer(str_extract(correct, "^[:digit:]"))
+  )
+
+post <- 
+  new_posttest_path |> 
+  readxl::read_excel() |> 
+  drop_na() |> 
+  janitor::clean_names() |> 
+  mutate(
+    results = as.integer(str_extract(correct, "^[:digit:]"))
+  )
+```
+
+## Free-text case reflections
+
 
 ```{r}
 teddy_string <- 
   teddy_path %>% 
   pdf_text() %>% 
-  str_c(collapse = TRUE)
+  str_flatten()
 
 # a list in which each entry is a string (a single reflection on Teddy's case")
 teddy_responses <- 
   teddy_string %>% 
   str_split(pattern = teddy_stem) %>% 
-  flatten() %>% 
-  str_trim() %>% 
-  str_remove_all(pattern = "\n") %>% 
-  str_replace_all(pattern = "[:blank:]+", replacement = " ")
+  pluck(1) |> 
+  #list_flatten() %>% 
+  map_chr(.f = str_trim) %>% 
+  map_chr(.f = str_remove_all, pattern = "\n") %>% 
+  map_chr(
+    .f = str_replace_all, 
+    pattern = "[:blank:]+", 
+    replacement = " "
+  ) |> 
+  str_subset(
+    pattern = regex("decline", ignore_case = TRUE), 
+    negate = TRUE
+  )
+
 ```
 
 ```{r}
 jesse_string <- 
   jesse_path %>% 
   pdf_text() %>% 
-  str_c(collapse = TRUE)
+  str_flatten()
 
-# a list in which each entry is a string (a single reflection on Teddy's case")
+# a list in which each entry is a string (a single reflection on Jesse's case")
 jesse_responses <- 
   jesse_string %>% 
   str_split(pattern = jesse_stem) %>% 
-  flatten() %>% 
-  str_trim() %>% 
-  str_remove_all(pattern = "\n") %>% 
-  str_replace_all(pattern = "[:blank:]+", replacement = " ")
+  pluck(1) |> 
+  #list_flatten() %>% 
+  map_chr(.f = str_trim) %>% 
+  map_chr(.f = str_remove_all, pattern = "\n") %>% 
+  map_chr(
+    .f = str_replace_all, 
+    pattern = "[:blank:]+", 
+    replacement = " "
+  ) |> 
+  str_subset(
+    pattern = regex("decline", ignore_case = TRUE), 
+    negate = TRUE
+  )
+
+head(jesse_responses, n = 3L)
 ```
 
 ```{r}
 carla_string <- 
   carla_path %>% 
   pdf_text() %>% 
-  str_c(collapse = TRUE)
+  str_flatten()
 
-# a list in which each entry is a string (a single reflection on Teddy's case")
+# a list in which each entry is a string (a single reflection on Carla's case")
 carla_responses <- 
   carla_string %>% 
   str_split(pattern = carla_stem) %>% 
-  flatten() %>% 
-  str_trim() %>% 
-  str_remove_all(pattern = "\n") %>% 
-  str_replace_all(pattern = "[:blank:]+", replacement = " ")
+  pluck(1) |> 
+  #list_flatten() %>% 
+  map_chr(.f = str_trim) %>% 
+  map_chr(.f = str_remove_all, pattern = "\n") %>% 
+  map_chr(
+    .f = str_replace_all, 
+    pattern = "[:blank:]+", 
+    replacement = " "
+  ) |> 
+  str_subset(
+    pattern = regex("decline", ignore_case = TRUE), 
+    negate = TRUE
+  )
+
+head(carla_responses, n = 3L)
 ```
+
+## CME surveys
+
+```{r}
+cme <- 
+  cme_path |> 
+  readxl::read_excel() |> 
+  janitor::clean_names() |> 
+  rename(
+    was_relevant_to_my_current_practice = was_relevant_to_my_current_scope_of_pra, 
+    what_changes_do_you_intend_to_make = what_changes_do_you_intend_to_make_in_yo, 
+    this_cme_activity_improved_my_knowledge = this_cecme_activity_improved_my_know2, 
+    delivery_and_effectiveness_of_content = delivery_and_effectiveness_of_conten, 
+    what_specific_topics_in_this_subject = what_specific_topics_in_this_subject_a, 
+    contributed_to_my_professional_growth = contributed_to_my_professional_growt
+  )
+
+head(cme)
+
+rating_variables <- 
+  c(
+    "quality_of_content", 
+    "quality_of_content", 
+    "delivery_and_effectiveness_of_content", 
+    "value_of_topic", 
+    "overall_rating"
+  )
+
+likert_variables <- 
+  c(
+    "this_cme_activity_improved_my_knowledge", 
+    "covered_content_useful_to_my_practice", 
+    "contributed_to_my_professional_growth",  
+    "was_relevant_to_my_current_practice", 
+    "was_engaging_and_interactive"  
+  )
+
+text_variables <- 
+  c(
+    "what_attitudes_strategies_or_skills_d", 
+    "do_you_have_specific_suggestions_as_to", 
+    "what_specific_topics_in_this_subject"
+  )
+
+
+colnames(cme)
+```
+
 
 # Analysis
 
@@ -187,13 +316,31 @@ carla_responses <-
 ```{r}
 # a useful function
 plot_metadata_1d <- 
-  function(my_var, subtitle) { 
-    metadata %>% 
+  function(my_metadata = metadata, my_var, subtitle, perc_size = 3.5, nudge = 2) { 
+    plot_tib <- 
+      my_metadata %>% 
       count({{my_var}}, sort = TRUE) %>% 
       mutate(my_factor = fct_reorder({{my_var}}, n)) %>% 
-      drop_na(my_factor) %>% 
+      drop_na(my_factor) |> 
+      mutate(
+        prop = n / sum(n), 
+        perc = scales::label_percent(accuracy = 0.1)(prop)
+      ) |> 
+      select(-prop)
+    
+    max_value <- max(plot_tib$n)
+    
+    plot_tib %>% 
       ggplot(aes(y = my_factor, x = n)) + 
-      geom_col() + 
+      geom_col(size = 0.4, color = "black") + 
+      geom_text(
+        mapping = aes(label = perc), 
+        hjust = 0, 
+        nudge_x = nudge, 
+        size = perc_size
+      ) + 
+      scale_x_continuous(limits = c(0, max_value * 1.08)) + 
+      theme_bw() + 
       labs(
         subtitle = subtitle, 
         x = "Number of registrants", 
@@ -205,26 +352,128 @@ plot_metadata_1d <-
 
 
 ```{r}
-plot_metadata_1d(
+profession_plot_path <- here::here("figures", "cme", "profession_plot.jpg")
+
+profession_plot <- 
+  plot_metadata_1d(
   my_var = profession, 
-  subtitle = "Most course registrants are physicians, educators, and students"
+  subtitle = "Most course registrants are physicians, students, and educators"
+  ) + 
+  theme(
+    panel.grid.major = element_line(color = "gray95"), 
+    panel.grid.minor = element_line(color = "gray95")
+  )
+
+ggsave(
+  filename = profession_plot_path, 
+  device = "jpg", 
+  width = 6, 
+  height = 3.75
 )
+
+knitr::include_graphics(profession_plot_path)
+```
+
+
+
+
+```{r}
+specialty_plot_path <- here::here("figures", "cme", "specialty_plot.jpg")
+
+specialty_plot <- 
+  plot_metadata_1d(
+    my_var = area_of_practice, 
+    subtitle = "Most registrants are in a subset of clinical specialties", 
+    perc_size = 2.75
+  ) + 
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.grid.major = element_line(color = "gray95"), 
+    panel.grid.minor = element_line(color = "gray95")
+  )
+
+ggsave(
+  filename = specialty_plot_path, 
+  device = "jpg", 
+  width = 5.75, 
+  height = 6
+)
+
+knitr::include_graphics(specialty_plot_path)
 ```
 
 ```{r}
-plot_metadata_1d(
-  my_var = area_of_practice, 
-  subtitle = "Most registrants are in a subset of clinical specialties"
-) + 
-  theme(axis.text.y = element_text(size = 6))
+# what does "all specialties" mean?
+metadata |> 
+  filter(area_of_practice == "All Specialties") |> 
+  count(profession, sort = TRUE)
 ```
 
+
+So we can see that the "All specialties" category is mostly students. So we might be interested in asking the same question for only physicians (the main target audience): 
+
 ```{r}
-plot_metadata_1d(
+physician_specialty_plot_path <- 
+  here::here("figures", "cme", "physician_specialty_plot.jpg")
+
+physician_specialty_plot <- 
+  metadata |> 
+  filter(profession == "Physician") |> 
+  plot_metadata_1d(
+    my_var = area_of_practice, 
+    subtitle = str_wrap(
+      "Most registrants are emergency, family, and internal medicine physicians",
+      width = 60
+    ), 
+    perc_size = 2.75, 
+    nudge = 0.75
+  ) + 
+  theme(
+    axis.text.y = element_text(size = 8),
+    panel.grid.major = element_line(color = "gray95"), 
+    panel.grid.minor = element_line(color = "gray95")
+  )
+
+ggsave(
+  filename = physician_specialty_plot_path, 
+  device = "jpg", 
+  width = 5.75, 
+  height = 4.75
+)
+
+knitr::include_graphics(physician_specialty_plot_path)
+```
+
+
+
+```{r}
+time_since_training_plot_path <- 
+  here::here("figures", "cme", "time_since_training_plot.jpg")
+  
+time_since_training_plot <- 
+  plot_metadata_1d(
   my_var = experience, 
   subtitle = "Registration is inversely proportional to time since training was completed"
+  ) + 
+  theme(
+    axis.text.y = element_text(size = 10),
+    panel.grid.major = element_line(color = "gray95"), 
+    panel.grid.minor = element_line(color = "gray95")
+  ) + 
+  labs(y = "Time since learner completed training")
+
+ggsave(
+  filename = time_since_training_plot_path,
+  plot = time_since_training_plot, 
+  device = "jpg", 
+  width = 6.25, 
+  height = 3
 )
+
+knitr::include_graphics(time_since_training_plot_path)
 ```
+
+
 
 
 ## course completion
@@ -235,6 +484,7 @@ registrants %>%
   ggplot(aes(x = completed_steps, y = n)) + 
   geom_line(color = "gray60") + 
   geom_point() + 
+  theme_bw() + 
   labs(
     subtitle = "Most registrants actually haven't started the course!",
     x = "Number of complete course \"steps\"", 
@@ -299,6 +549,7 @@ registrants %>%
   mutate(cumulative_n = cumsum(n)) %>% 
   ggplot(aes(x = completion_date, y = cumulative_n)) + 
   geom_line() + 
+  theme_bw() + 
   labs(
     subtitle = 
       "Registrants have completed the course at a ~constant rate since launch", 
@@ -308,122 +559,565 @@ registrants %>%
 ```
 
 
-## assessments 
 
-### Improvement from pre-test to post-test? 
 
-Scores from (first) pre-test to (final) post-test: 
+## Pre- and Post-test Assessments 
+
+
+## Preprocessing 
+
+
+We also filter for tests that occur after March 27, 2021 (after our course team had already taken trial runs of the course). 
 
 ```{r}
-pre_post_tibble <- 
-  tests %>% 
-  transmute(
-    user_id, 
-    email,
-    percentage = (score / total) * 100,
-    quiz_title = 
-      str_to_lower(quiz_title) %>% 
-      str_replace("-", "_")
-  ) %>% 
-  pivot_wider(
-    names_from = quiz_title,
-    values_from = percentage, 
-    values_fn = list
-  ) %>% 
-  # filter out people who have no post-test responses
-  filter(map_lgl(.x = post_test, .f = ~length(.x) > 0)) %>% 
-  # take only first pre-test and last post-test
-  mutate(
-    pre_test = map_dbl(.x = pre_test, .f = ~ .x[[1]]), 
-    post_test = map_dbl(.x = post_test, .f = ~ .x[[length(.x)]]), 
-    improvement = post_test - pre_test
-  )
+pre <- 
+  pre |> 
+  filter(date > launch_date) 
+#   group_by(username) |> 
+#   summarize(pre_results = mean(results)) 
 
-paired_t <- 
+post <- 
+  post |> 
+  filter(date > launch_date)
+#   group_by(username) |> 
+#   summarize(post_results = mean(results))
+```
+
+
+At this point, we notice that some people filled out multiple pre- and post-tests. This observation motivates us to ask 3 questions: 
+
+- A: How many learners passed the pre-test on their first try?
+- B: How many times did learners attempt the post-test? 
+- C: How many attempts did it take for learners to pass the post-test? 
+
+We answer each of those questions below. 
+
+### Detour A: How many learners passed the pre-test on their first try?
+
+
+```{r}
+pre_filtered <- 
+  pre |> 
+  group_by(username) |> 
+  slice_min(order_by = date, n = 1L) |> 
+  ungroup() 
+
+num_first_passes <- 
+  pre_filtered |> 
+  mutate(pass = results >= passing_score) |> 
+  pull(pass) |> 
+  sum()
+
+print(num_first_passes)
+
+num_first_passes / nrow(pre_filtered)
+```
+
+
+
+### Detour B: How many times did learners attempt the post-test (on average)? 
+
+```{r}
+post |> 
+  count(username, sort = TRUE) |> 
+  pull(n) |> 
+  median()
+```
+
+
+### Number of passes on first attempt for post-test
+
+```{r}
+post_filtered <- 
+  post |> 
+  group_by(username) |> 
+  slice_min(order_by = date, n = 1L) |> 
+  ungroup() 
+
+num_first_passes <- 
+  post_filtered |> 
+  mutate(pass = results >= passing_score) |> 
+  pull(pass) |> 
+  sum()
+
+print(num_first_passes)
+nrow(post_filtered)
+
+num_first_passes / nrow(post_filtered)
+```
+
+
+
+At this point, we want to derive a single pre-test and a single-post-test score for each person in order to compare individuals' performance before and after taking the course. To do so, we average the scores over all of their attempts of the pre- and post-test.
+
+```{r}
+pre <- 
+  pre |> 
+  group_by(username) |>
+  summarize(pre_results = mean(results))
+
+post <- 
+  post |> 
+  group_by(username) |>
+  summarize(post_results = mean(results))
+```
+
+
+
+## Statistical Analysis: Pre- vs. Post-test Improvement
+
+We can then combine the pre- and post-test datasets in order to analyze people who took both. 
+
+```{r}
+test_tibble <- 
+  full_join(pre, post, by = "username") |> 
+  drop_na() |> 
+  mutate(diff = post_results - pre_results)
+
+# perform t-test and extract needed statistics
+pre_post_t_test <- 
   t.test(
-    pre_post_tibble$post_test, 
-    pre_post_tibble$pre_test
-  ) %>% 
-  broom::tidy() %>% 
-  select(p_value = p.value, t_value = statistic, df = parameter)
+  x = test_tibble$post_results, 
+  y = test_tibble$pre_results, 
+  paired = TRUE
+)
 
-current_n <- nrow(pre_post_tibble)
-
-pre_post_tibble %>% 
-  ggplot(aes(x = improvement)) + 
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") + 
-  geom_histogram(bins = 9) + 
-  scale_x_continuous(labels = scales::label_number(suffix = "%")) + 
-  labs(
-    subtitle = "Most learners' scores improve from pre-test to post-test", 
-    x = "Difference in test score between post-test and pre-test", 
-    y = "Number of registrants", 
-    caption = 
-      str_c(
-        "N = ", current_n, " learners", "\n", 
-        "t = ", round(paired_t$t_value, 2), "; ",
-        "p ", format.pval(paired_t$p_value)
-      )
+pre_post_t <- 
+  pre_post_t_test$statistic |> 
+  round(2)
+pre_post_df <- pre_post_t_test$parameter
+pre_post_p_val <- 
+  paste0("p", 
+         pre_post_t_test$p.value |> 
+           scales::pvalue()
   )
+
+pre_post_annotation <- 
+  str_glue("t({pre_post_df}) = {pre_post_t}; {pre_post_p_val}")
+
+# perform wilcox rank sum test just to be sure 
+wilcox.test(
+  x = test_tibble$post_results, 
+  y = test_tibble$pre_results, 
+  paired = TRUE
+) |> 
+  broom::tidy()
 ```
 
-We can also break this down by profession, which gives us a quick-and-dirty plot suggesting that there aren't huge differences across professions...
 
 ```{r}
-pre_post_tibble %>% 
-  left_join(select(metadata, -name)) %>% 
-  mutate(across(any_of(colnames(metadata)), replace_na, replace = "unknown")) %>% 
-  ggplot(aes(x = improvement)) + 
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray60") + 
-  geom_histogram(bins = 9) + 
-  facet_wrap(facets = vars(profession), scales = "free_y") + 
-  scale_x_continuous(labels = scales::label_number(suffix = "%")) + 
-  labs(
-    subtitle = "Most learners' scores improve from pre-test to post-test", 
-    x = "Difference in test score between post-test and pre-test", 
-    y = "Number of registrants"
-  )
-```
+my_caption <- 
+  "The black vertical line represents a pre/post change of 0 (the null hypothesis); the red vertical line represents the observed median change across all learners." |> 
+  str_wrap(width = 82)
 
-Percentage of passes on the pre-test vs. post-test: 
-
-Let's say we define a pass as a 70% or above. Then how many passed on the pre-test vs. the post-test? 
-
-```{r, warning = FALSE}
-pre_post_tibble %>% 
-  mutate(
-    pass_pre = if_else(pre_test >= 70, "Pass", "Fail"), 
-    pass_post = if_else(post_test >= 70, "Pass", "Fail"), 
-    test_pattern = 
-      case_when(
-        pass_pre == "Pass" & pass_post == "Pass" ~ "Passed pre- and post-test", 
-        pass_pre == "Fail" & pass_post == "Pass" ~ "Passed only post-test", 
-        pass_pre == "Fail" & pass_post == "Fail" ~ "Failed both tests"
-      )
-  ) %>% 
-  count(pass_pre, pass_post, test_pattern) %>% 
-  ggplot(aes(axis1 = pass_pre, axis2 = pass_post, y = n)) + 
-  geom_alluvium(aes(fill = test_pattern)) + 
-  geom_stratum(fill = "gray90") + 
-  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +  
-  scale_x_discrete(limits = c("Pre-test", "Post-test"), expand = c(.2, .05)) +
-  ggthemes::scale_fill_tableau() + 
+pre_post_plot <- 
+  test_tibble |> 
+  ggplot(aes(x = diff)) + 
+  geom_vline(
+    xintercept = 0, 
+    linetype = "dashed", 
+    linewidth = 0.45, 
+    color = "gray40"
+  ) + 
+  geom_histogram(bins = 25, color = "black", size = 0.2) + 
+  geom_vline(
+    xintercept = median(test_tibble$diff), 
+    linetype = "dashed", 
+    linewidth = 0.45, 
+    color = "red"
+  ) + 
+  annotate(
+    geom = "label", 
+    x = -6, 
+    y = 200,
+    label = pre_post_annotation, 
+    hjust = 0, 
+    label.r = unit(0, units = "lines"), 
+    size = 3.5
+  ) + 
+   annotate(
+    geom = "label", 
+    x = 0.05, 
+    y = 230,
+    label = " Median Improvement→", 
+    hjust = 0, 
+    vjust = 1, 
+    size = 2.05, 
+    label.size = NA, 
+    label.r = unit(0, "lines"), 
+    label.padding = unit(0, "lines")
+   ) + 
   theme_minimal() + 
-  theme(legend.position = "right") + 
+  theme(plot.caption = element_text(size = 7.5)) + 
   labs(
-    x = NULL, 
-    y = "Number of registrants", 
-    fill = NULL
+    x = "Difference in pre- and post-test scores", 
+    y = "Number of learners", 
+    caption = my_caption
   ) 
+
+ggsave(
+  filename = here::here("figures", "cme", "pre_post_plot.jpg"), 
+  plot = pre_post_plot, 
+  device = "jpg",
+  width = 4.5, 
+  height = 3
+)
+
+knitr::include_graphics(here::here("figures", "cme", "pre_post_plot.jpg"))
 ```
 
-From this plot, we can see that the largest group of learners by far is the group that failed the pre-test but passed the post-test, indicating that the course did in fact do its job (get most people from not knowing enough to pass the test to knowing enough to pass the test). 
 
-# Reflection analysis 
+We can also analyze the improvement across subgroups of learners: 
 
-[Under construction]
+```{r}
+subgroup_tibble <- 
+  test_tibble %>% 
+  transmute(
+    user_id = 
+      username |> 
+      str_remove("\\(.+\\)") |> 
+      str_trim(), 
+    email = user_id, 
+    pre_test = pre_results, 
+    post_test = post_results, 
+    improvement = diff
+  ) |> 
+  left_join(select(metadata, -name)) |> 
+  mutate(across(any_of(colnames(metadata)), replace_na, replace = "Unknown"))
 
-```{r, eval = FALSE, include = FALSE, echo = FALSE}
+test_tibble_emails <- 
+  test_tibble %>% 
+  transmute(
+    user_id = 
+      username |> 
+      str_remove("\\(.+\\)") |> 
+      str_trim()
+  ) |> 
+  pull(user_id)
+
+metadata |>
+  mutate(email_present = email %in% test_tibble_emails) |> 
+  count(email_present)
+
+
+```
+
+```{r}
+subgroup_plot <- 
+  subgroup_tibble |> 
+  add_count(profession) |> 
+  filter(n >= 5) |> 
+  mutate(
+    profession = 
+      recode(
+        profession, 
+        "Nurse practitioner" = "Nurse", 
+        "Other" = "Unknown", 
+        "Researcher" = NA_character_
+      ), 
+    profession = str_to_title(profession), 
+    #  profession = fct_reorder(profession, n)
+  ) |> 
+  drop_na(profession) |> 
+  ggplot(aes(x = improvement)) + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") + 
+  geom_histogram(binwidth = 1, color = "black", size = 0.3) + 
+  facet_wrap(facets = vars(profession), scales = "free_y") + 
+  scale_x_continuous(labels = scales::label_number(accuracy = 1), minor_breaks = NULL) + 
+  scale_y_continuous(labels = scales::label_number(accuracy = 1), minor_breaks = NULL) + 
+  theme_minimal() +
+  labs(
+    subtitle = "Across professions, most learners' scores improve from pre-test to post-test", 
+    x = "Difference in pre- and post-test scores", 
+    y = "Number of learners", 
+  )
+
+
+ggsave(
+  filename = here::here("figures", "cme", "subgroup_plot.jpg"), 
+  plot = subgroup_plot, 
+  device = "jpg",
+  width = 6, 
+  height = 4
+)
+
+knitr::include_graphics(here::here("figures", "cme", "subgroup_plot.jpg"))
+```
+
+
+## CME surveys
+
+### Quantitative variables
+
+```{r}
+rating_plot_path <- here::here("figures", "cme", "rating_plot.jpg")
+
+rating_tibble <- 
+  cme |> 
+  select(any_of(rating_variables)) |> 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "context", 
+    values_to = "rating"
+  ) |> 
+  mutate(context = as.factor(context), rating = as.factor(rating)) |> 
+  count(context, rating, .drop = FALSE) |> 
+  group_by(context) |> 
+  mutate(
+    prop = n / sum(n), 
+    percentage = scales::label_percent(accuracy = 0.1)(prop), 
+    context = 
+      context |> 
+      str_replace_all("_", " ") |> 
+      str_replace("^.", str_to_upper(str_sub(context, start = 1L, end = 1L)))
+  ) |> 
+  ungroup() 
+
+rating_plot <-
+  rating_tibble |> 
+  mutate(context = fct_reorder(context, n, max, .desc = TRUE)) |> 
+  ggplot(aes(x = rating, y = n)) + 
+  geom_col() + 
+  geom_text(aes(x = rating, y = n + 2, label = percentage), size = 3.75, vjust = 0) + 
+  scale_y_continuous(limits = c(NA, max(rating_tibble$n + 5))) + 
+  facet_wrap(facets = vars(context), nrow = 2) + 
+  theme_bw() + 
+  labs(
+    subtitle = "Rate the each component of the course on a 1-5 scale", 
+    y = "Number of CME survey respondents", 
+    x = "Numeric rating"
+  )
+
+ggsave(
+  filename = rating_plot_path, 
+  plot = rating_plot,
+  device = "jpg", 
+  width = 6, 
+  height = 6
+)
+
+knitr::include_graphics(rating_plot_path)
+```
+
+
+### Likert variables 
+
+```{r}
+likert_plot_path <- here::here("figures", "cme", "likert_plot.jpg")
+
+likert_levels <- 
+  c("Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree")
+
+likert_tibble <- 
+  cme |> 
+  select(any_of(likert_variables)) |> 
+  pivot_longer(
+    cols = everything(), 
+    names_to = "context", 
+    values_to = "rating"
+  ) |> 
+  mutate(context = as.factor(context), rating = factor(rating, likert_levels)) |> 
+  count(context, rating, .drop = FALSE) |> 
+  group_by(context) |> 
+  mutate(
+    prop = n / sum(n), 
+    percentage = scales::label_percent(accuracy = 0.1)(prop), 
+    context = 
+      context |> 
+      str_replace_all("_", " ") |> 
+      #str_replace("^.", str_to_upper(str_sub(context, start = 1L, end = 1L))) |> 
+      str_replace("this cme activity i", "i") |> 
+      (\(x) str_c("...", x))()
+  ) |> 
+  ungroup() 
+
+likert_plot <-
+  likert_tibble |> 
+  mutate(context = fct_reorder(context, n, max, .desc = TRUE)) |> 
+  ggplot(aes(x = rating, y = n)) + 
+  geom_col() + 
+  geom_text(aes(x = rating, y = n + 4, label = percentage), size = 3.75, hjust = 0) + 
+  scale_y_continuous(limits = c(NA, max(likert_tibble$n + 45))) + 
+  coord_flip() +
+  facet_wrap(facets = vars(context), nrow = 2) + 
+  theme_bw() + 
+  labs(
+    subtitle = "How much do you agree with the following statement: \"This CME activity...\"?", 
+    y = "Number of CME survey respondents", 
+    x = "Response"
+  )
+
+ggsave(
+  filename = likert_plot_path, 
+  plot = likert_plot,
+  device = "jpg", 
+  width = 8.5, 
+  height = 4
+)
+
+knitr::include_graphics(likert_plot_path)
+```
+
+
+### Text comments - Sentiment analysis
+
+```{r}
+sentiment_analysis <- function(input_data, token_col, id_col) { 
+  lexicon <- get_sentiments("nrc")
+  
+  
+  sentiment_words <- 
+    input_data |> 
+    drop_na({{ token_col }}) |> 
+    select({{ token_col }}, {{ id_col }}) |> 
+    unnest_tokens(output = "word", input = {{ token_col }}) |> 
+    left_join(lexicon)
+  
+  sentiments <- 
+    sentiment_words |>
+    count({{ id_col }}, sentiment) |> 
+    group_by({{ id_col }}) |> 
+    mutate(
+      prop = n / sum(n), 
+      #perc = scales::label_percent(accuracy = 0.1)(prop), 
+      sentiment = replace_na(sentiment, "none")
+    ) |> 
+    ungroup()
+  
+  sentiments_plot <- 
+    sentiments |> 
+    mutate(sentiment = fct_reorder(sentiment, prop)) |> 
+    filter(sentiment != "none") |> 
+    filter(prop < 0.95) |> 
+    ggplot(aes(y = sentiment, x = prop)) +
+    geom_violin(aes(fill = sentiment), trim = FALSE, scale = "width") + 
+    geom_boxplot(width = 0.15, outlier.color = NA) + 
+    geom_jitter(shape = ".", height = 0.05, size = 1, alpha = 0.8) + 
+    ggthemes::scale_fill_tableau() +
+    scale_x_continuous(labels = scales::label_percent(accuracy = 0.1)) + 
+    theme_bw() + 
+    theme(axis.title = element_text(size = 9)) + 
+    theme(legend.position = "none") + 
+    labs(
+      x = "% of words matching a sentiment per participant" |> 
+        str_wrap(width = 60),
+      y = "Sentiment"
+    )
+
+  
+  sentiments_mean_plot <- 
+    sentiments |>
+    group_by(sentiment) |>
+    summarize(
+      prop = mean(prop), 
+      perc = scales::label_percent(accuracy = 0.1)(prop)
+    ) |>
+    ungroup() |>
+    mutate(sentiment = fct_reorder(sentiment, prop)) |>
+    filter(sentiment != "none") |>
+    ggplot(aes(y = sentiment, x = prop)) +
+    geom_col() +
+    scale_x_continuous(labels = scales::label_percent(accuracy = 0.1)) + 
+    theme_bw() + 
+    theme(axis.title = element_text(size = 9)) + 
+    labs(
+      x = 
+        "% of words matching a sentiment per participant (mean)" |> 
+        str_wrap(width = 60), 
+      y = "Sentiment"
+    )
+  
+  result <- 
+    list(
+      sentiments_plot = sentiments_plot, 
+      sentiments_mean_plot = sentiments_mean_plot, 
+      sentiment_words = sentiment_words
+    )
+  
+  return(result)
+}
+```
+
+
+```{r}
+cme_text <- 
+  cme |> 
+  select(any_of(text_variables), form_submission_id)
+
+sentiments_plots <- 
+  cme_text |> 
+  sentiment_analysis(
+    token_col = what_attitudes_strategies_or_skills_d, 
+    id_col = form_submission_id
+  )
+
+attitudes_strategies_plot <- sentiments_plots$sentiments_plot
+
+attitudes_strategies_mean_plot <- sentiments_plots$sentiments_mean_plot
+
+attitudes_strategies_plot_path <- 
+  here::here("figures", "cme", "attitudes_strategies.jpg")
+
+attitudes_strategies_mean_plot_path <- 
+  here::here("figures", "cme", "attitudes_strategies_mean.jpg")
+
+ggsave(
+  filename = attitudes_strategies_plot_path, 
+  plot = attitudes_strategies_plot, 
+  width = 4, 
+  height = 3
+)
+
+knitr::include_graphics(attitudes_strategies_plot_path)
+
+ggsave(
+  filename = attitudes_strategies_mean_plot_path, 
+  plot = attitudes_strategies_mean_plot, 
+  width = 4, 
+  height = 3
+)
+
+knitr::include_graphics(attitudes_strategies_mean_plot_path)
+
+
+sentiments_plots$sentiment_words |> 
+  drop_na() |> 
+  arrange(sentiment) |> 
+  count(sentiment, word) |> 
+  group_by(sentiment) |> 
+  slice_max(order_by = n, n = 2, with_ties = FALSE) |> 
+  ungroup()
+```
+
+
+[Pull out top words for each sentiment]
+
+
+```{r}
+
+sentiment_plot_list <- 
+  map(
+    .x = text_variables, 
+    .f = 
+      \(x) { sentiment_analysis(
+        input_data = cme_text, 
+        token_col = any_of(x), 
+        id_col = form_submission_id)
+      }
+  ) |> 
+  set_names(nm = text_variables)
+
+walk(sentiment_plot_list, print)
+```
+
+
+
+
+# Case sentiment analysis
+
+## Teddy
+
+```{r}
 # teddy
 teddy_tibble <- 
   tibble(
@@ -431,9 +1125,58 @@ teddy_tibble <-
     response = teddy_responses
   ) 
 
-teddy_tibble %>% 
-  filter(!(str_detect(str_trim(str_to_lower(response)), "decline"))) %>% 
-  mutate(response = str_remove(response, "TRUE")) %>% 
-  knitr::kable()
+teddy_sentiments <- 
+  teddy_tibble |> 
+  sentiment_analysis(
+    token_col = response, 
+    id_col = response_id
+  )
+
+print(teddy_sentiments)
+
+```
+
+
+## Carla
+
+
+```{r}
+# carla
+carla_tibble <- 
+  tibble(
+    response_id = 1:length(carla_responses), 
+    response = carla_responses
+  ) 
+
+carla_sentiments <- 
+  carla_tibble |> 
+  sentiment_analysis(
+    token_col = response, 
+    id_col = response_id
+  )
+
+print(carla_sentiments)
+
+```
+
+
+## Jesse
+
+```{r}
+# jesse
+jesse_tibble <- 
+  tibble(
+    response_id = 1:length(jesse_responses), 
+    response = jesse_responses
+  ) 
+
+jesse_sentiments <- 
+  jesse_tibble |> 
+  sentiment_analysis(
+    token_col = response, 
+    id_col = response_id
+  )
+
+print(jesse_sentiments)
 ```
 

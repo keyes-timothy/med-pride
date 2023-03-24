@@ -4,9 +4,11 @@ author: "Timothy Keyes"
 date: "`r Sys.Date()`"
 always_allow_html: true
 output: 
-  github_document:
+  word_document: 
     toc: true
   html_document: 
+    toc: true
+  github_document:
     toc: true
 ---
 
@@ -469,6 +471,95 @@ demo_combined <-
   arrange(variable_type, desc(allopathic_count)) %>% 
   select(-variable_type)
 
+```
+
+
+```{r}
+library(flextable)
+library(officer)
+
+demo_table_text <- 
+  demo_overall %>% 
+  bind_rows(demo_combined) %>% 
+    transmute(
+    variable = recode(variable, !!! recode_values),  
+    `Full Sample` = str_glue("{`Full Sample_count`} ({`Full Sample_percentage`}%)"), 
+    `Allopathic (MD)` = str_glue("{allopathic_count} ({allopathic_percentage}%)"), 
+    `Osteopathic (DO)` = str_glue("{osteopathic_count} ({osteopathic_percentage}%)"), 
+  ) %>% 
+  # add row for gender header
+  add_row(
+    variable = "Gender",
+    `Full Sample` =  " ", 
+    `Allopathic (MD)` = " ", 
+    `Osteopathic (DO)` = " ", 
+    .before = 2
+  ) %>% 
+  # add row for Sex assigned at birth header
+  add_row(
+    variable = "Sex Assigned At Birth",
+    `Full Sample` =  " ", 
+    `Allopathic (MD)` = " ", 
+    `Osteopathic (DO)` = " ", 
+    .before = 11
+  ) %>% 
+  # add row for sexual orientation header
+  add_row(
+    variable = "Sexual Orientation",
+    `Full Sample` =  " ", 
+    `Allopathic (MD)` = " ", 
+    `Osteopathic (DO)` = " ", 
+    .before = 14
+  ) %>% 
+  # add row for Race/Ethnicity header
+  add_row(
+    variable = "Race/Ethnicity",
+    `Full Sample` =  " ", 
+    `Allopathic (MD)` = " ", 
+    `Osteopathic (DO)` = " ", 
+    .before = 24
+  ) %>% 
+  # add row for Year in School header
+  add_row(
+    variable = "Year in School",
+    `Full Sample` =  " ", 
+    `Allopathic (MD)` = " ", 
+    `Osteopathic (DO)` = " ", 
+    .before = 32
+  ) 
+
+table_path <- 
+  file.path("~", "Desktop", "demo_table.docx")
+
+demo_table_text %>% 
+  mutate(across(everything(), as.character)) %>% 
+  rename(` ` = variable) %>% 
+  flextable::regulartable() %>% 
+  flextable::theme_zebra(
+    odd_header = "white"
+  ) %>% 
+  # add horizontal line after header
+  hline_bottom(part = "header", border = fp_border(width = 2)) %>% 
+  # add horizontal line after table 
+  hline_bottom(part = "body", border = fp_border(width = 2)) %>% 
+  # make header row bold
+  bold(part = "header", bold = TRUE) %>% 
+  # make overall row bold
+  bold(part = "body", i = 1, j = 1:ncol(demo_table_text)) %>% 
+  # insert gender header 
+  bg(part = "body", i = c(2, 11, 14, 24, 32), bg = "#666666") %>% 
+  color(part = "body", i = c(2, 11, 14, 24, 32), color = "#ffffff") %>% 
+  bold(part = "body", i = c(2, 11, 14, 24, 32)) %>% 
+  footnote(value = as_paragraph(my_footnote), ref_symbols = " ") %>% 
+  autofit() %>% 
+  save_as_docx(path = table_path)
+  
+
+```
+
+
+```{r}
+
 demo_table <- 
   demo_overall %>% 
   bind_rows(demo_combined) %>%
@@ -781,6 +872,17 @@ overall_outness_plot %>%
     units = "in"
   )
 
+overall_outness_plot %>% 
+  ggsave(
+    filename = "overall_outness_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
 # save for later, so that other plots can use the same ordering
 environment_levels <- 
   levels(overall_outness_data$environment)
@@ -882,7 +984,7 @@ demographics_n <-
           .x %>% 
           mutate(
             identity = 
-              fct_lump(identity, prop = 0.05, w = n, other_level = "another") %>% 
+              fct_lump(identity, prop = 0.005, w = n, other_level = "another") %>% 
               as.character()
           ) %>% 
           count(identity, wt = n)
@@ -974,16 +1076,16 @@ outness_subgroup <-
         .f = ~
           .y %>% 
           mutate(
-            identity = 
+            identity =
                    fct_other(
-                     f = identity, 
-                     keep = 
-                       .x %>% 
-                       pull(identity) %>% 
-                       unique(), 
+                     f = identity,
+                     keep =
+                       .x %>%
+                       pull(identity) %>%
+                       unique(),
                      other_level = "another"
                    )
-          ) %>% 
+          ) %>%
           group_by(environment, identity) %>% 
           summarize(number_out = sum(number_out), .groups = "drop") %>% 
           left_join(.x) %>% 
@@ -1198,6 +1300,17 @@ so_plot %>%
     height = 5,
     units = "in"
   )
+
+so_plot %>% 
+  ggsave(
+    filename = "so_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
 ```
 
 We can see that our $\chi^2$-test for independence (which we're using here as an omnibus test) didn't detect significant differences across sexual orientations, and this is probably because the same broad trend can be seen for most identities (most people are comfortable being "out" to their peers, but are less so in more professional contexts - particularly on applications to post-graduate training). 
@@ -1209,7 +1322,7 @@ That being said, there are some interesting trends among subgroups - in general,
 We can make the same kind of plot for different genders. Note that in this case, the "another" gender category includes the least-common responses 
 
 ```{r}
-gender_irrelevant_levels <- c("another", "genderqueer") 
+gender_irrelevant_levels <- c("another", "gender-expansive", "man", "woman") 
 gender_subtitle <- "LGBTQ+ student \'outness\' by gender"
 
 gender_plot <- 
@@ -1217,7 +1330,8 @@ gender_plot <-
     my_var_type = "gender", 
     irrelevant_levels =  gender_irrelevant_levels, 
     subtitle = gender_subtitle
-  )
+  ) +
+  scale_y_continuous(limits = c(0, NA))
 
 gender_plot
 
@@ -1226,6 +1340,17 @@ gender_plot %>%
     filename = "gender_plot_supplemental.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 7, 
+    height = 4.5,
+    units = "in"
+  )
+
+gender_plot %>% 
+  ggsave(
+    filename = "gender_plot_supplemental.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 7, 
     height = 4.5,
@@ -1349,6 +1474,17 @@ gender_plot %>%
     height = 5,
     units = "in"
   )
+
+gender_plot %>% 
+  ggsave(
+    filename = "gender_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
 ```
 
 
@@ -1360,7 +1496,7 @@ We can make a similar plot using the racial/ethnic identifiers that each student
 race_plot <- 
   plot_outness(
     my_var_type = "race", 
-    irrelevant_levels = c("another"), 
+    irrelevant_levels = c("another"),
     subtitle = "LGBTQ+ student \'outness\' by Race/Ethnicity"
   )
 
@@ -1371,6 +1507,17 @@ race_plot %>%
     filename = "race_plot.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+race_plot %>% 
+  ggsave(
+    filename = "race_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 6.5, 
     height = 5,
@@ -1403,6 +1550,17 @@ degree_plot %>%
     height = 5,
     units = "in"
   )
+
+degree_plot %>% 
+  ggsave(
+    filename = "degree_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
 ```
 
 As above, it doesn't seem that there are meaningful differences between MD and DO students, although our sample has such a small number of DO students that this is difficult to say for certain. 
@@ -1424,6 +1582,17 @@ year_plot %>%
     filename = "year_plot.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+year_plot %>% 
+  ggsave(
+    filename = "year_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 6.5, 
     height = 5,
@@ -1476,8 +1645,6 @@ year_significance_tests <-
 
 year_significance_tests
 
-?prop.test
-
 ```
 
 Thus, we can see that the environments in which significant difference arose were in students' relationships with mentors, on their applications to medical school, and on their applications to residency/post-doctoral studies.
@@ -1511,6 +1678,17 @@ year_plot %>%
     filename = "year_plot.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 6.5, 
+    height = 5,
+    units = "in"
+  )
+
+year_plot %>% 
+  ggsave(
+    filename = "year_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 6.5, 
     height = 5,
@@ -1602,6 +1780,17 @@ support_plot %>%
     filename = "support_plot.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 7.25, 
+    height = 5,
+    units = "in"
+  )
+
+support_plot %>% 
+  ggsave(
+    filename = "support_plot.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 7.25, 
     height = 5,
@@ -1746,6 +1935,17 @@ support_plot_sgm %>%
     filename = "support_plot_sgm.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 7.25, 
+    height = 5,
+    units = "in"
+  )
+
+support_plot_sgm %>% 
+  ggsave(
+    filename = "support_plot_sgm.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 7.25, 
     height = 5,
@@ -1992,6 +2192,17 @@ new_figure %>%
     height = 4.5,
     units = "in"
   )
+
+new_figure %>% 
+    ggsave(
+    filename = "new_figure.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 8.5, 
+    height = 4.5,
+    units = "in"
+  )
   
 ```
 
@@ -2157,6 +2368,17 @@ alluvium_plot %>%
     units = "in"
   )
 
+alluvium_plot %>% 
+  ggsave(
+    filename = "outness_alluvium.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = file.path(figure_out_path), 
+    width = 6, 
+    height = 4.5, 
+    units = "in"
+  )
+
 ```
 
 
@@ -2216,6 +2438,17 @@ alluvium_plot %>%
     filename = "outness_alluvium_2.pdf", 
     plot = ., 
     device = "pdf", 
+    path = file.path(figure_out_path), 
+    width = 4.5, 
+    height = 4.5, 
+    units = "in"
+  )
+
+alluvium_plot %>% 
+  ggsave(
+    filename = "outness_alluvium_2.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = file.path(figure_out_path), 
     width = 4.5, 
     height = 4.5, 
@@ -2335,6 +2568,17 @@ figure_1 %>%
     units = "in"
   )
 
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version1.jpg", 
+    plot = ., 
+    device = "jpg", 
+    path = figure_out_path, 
+    width = 11, 
+    height = 8,
+    units = "in"
+  )
+
 
 ```
 
@@ -2355,6 +2599,17 @@ figure_1 %>%
     filename = "figure_1_version2.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 7, 
+    height = 12,
+    units = "in"
+  )
+
+figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version2.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 7, 
     height = 12,
@@ -2384,6 +2639,17 @@ figure_s1 %>%
     filename = "figure_s1.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 6, 
+    height = 12,
+    units = "in"
+  )
+
+figure_s1 %>% 
+    ggsave(
+    filename = "figure_s1.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 6, 
     height = 12,
@@ -2422,6 +2688,17 @@ alternate_figure_1 %>%
     filename = "figure_1_version3.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 13, 
+    height = 12,
+    units = "in"
+  )
+
+alternate_figure_1 %>% 
+    ggsave(
+    filename = "figure_1_version3.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 13, 
     height = 12,
@@ -2473,6 +2750,17 @@ figure_2 %>%
     filename = "figure_2.pdf", 
     plot = ., 
     device = "pdf", 
+    path = figure_out_path, 
+    width = 7.5, 
+    height = 9,
+    units = "in"
+  )
+
+figure_2 %>% 
+    ggsave(
+    filename = "figure_2.jpg", 
+    plot = ., 
+    device = "jpg", 
     path = figure_out_path, 
     width = 7.5, 
     height = 9,
@@ -2699,80 +2987,5 @@ out_plot <- function(variable) {
 
 out_plot(is_urm)
 
-```
-
-
-```{r}
-find_outness_relationship(school_affinity_group_involved)
-```
-
-
-
-```{r}
-find_outness_relationship(out_classmates_peers)
-
-out_plot(out_classmates_peers)
-```
-
-```{r}
-find_outness_relationship(school_activities_advocacy)
-
-out_plot(school_activities_advocacy)
-```
-
-
-```{r}
-library(tidymodels)
-
-model_data <- 
-  na_data %>% 
-  select(
-    out_residency_app,
-    #starts_with("gender"), 
-    #starts_with("so_"), 
-    #starts_with("race_"), 
-    starts_with("school_affinity"), 
-    starts_with("school_activities"), 
-    starts_with("satisfaction_"), 
-    #state, 
-    degree_type
-  ) %>% 
-  select(
-    -ends_with("_description"), 
-    -ends_with("explanation"), 
-    -ends_with("_benefit")
-  ) %>% 
-  mutate(
-    across(where(is.character), as.factor)
-  ) 
-
-
-model_data
-
-```
-
-
-```{r, eval = FALSE}
-outness_model <- 
-  logistic_reg() %>% 
-  set_engine("glmnet")
-
-model_data
-
-outness_model <-
-  fit_xy(
-    outness_model, 
-    y = pull(model_data, out_residency_app), 
-    x = select(model_data, -out_residency_app), 
-  )
-
-outness_model %>% 
-  tidy() %>% 
-  arrange(-estimate)
-
-outness_model %>% 
-  multi_predict(model_data) %>% 
-  mutate(id = 1:nrow(.)) %>% 
-  unnest()
 ```
 
